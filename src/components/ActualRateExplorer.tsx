@@ -1,0 +1,684 @@
+import React, { useState, useMemo } from "react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  DollarSign,
+  Landmark,
+  Plus,
+  Search,
+  Download,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet,
+  ArrowUpRight,
+  ArrowDownRight,
+  Filter,
+  BarChart3,
+  Scale,
+  Globe,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
+import { ForexDataPoint } from "../types";
+import { enrichWithMovingAverages } from "../utils/metricsCalculator";
+import { useTheme } from "../context/ThemeContext";
+import {
+  fetchLatestFrankfurterRate,
+  fetchHistoricalFrankfurterSeries,
+  mergeFrankfurterDataIntoDataset,
+} from "../utils/frankfurterService";
+
+interface ActualRateExplorerProps {
+  data: ForexDataPoint[];
+  onAddActualRate: (date: string, actualValue: number) => void;
+  onUpdateFullDataset?: (newData: ForexDataPoint[]) => void;
+  currentSpot: number;
+}
+
+export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
+  data,
+  onAddActualRate,
+  onUpdateFullDataset,
+  currentSpot,
+}) => {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+  const [searchDate, setSearchDate] = useState("");
+  const [selectedYear, setSelectedYear] = useState<string>("ALL");
+  const [inputDate, setInputDate] = useState(new Date().toISOString().split("T")[0]);
+  const [inputRate, setInputRate] = useState<string>("");
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [isSyncingLatest, setIsSyncingLatest] = useState(false);
+  const [isSyncingHistory, setIsSyncingHistory] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ type: "success" | "error"; message: string } | null>(
+    null
+  );
+
+  // Sync Latest Spot from Frankfurter API
+  const handleSyncLatestFrankfurter = async () => {
+    setIsSyncingLatest(true);
+    setSyncStatus(null);
+    try {
+      const latest = await fetchLatestFrankfurterRate();
+      onAddActualRate(latest.date, latest.rate);
+      setSyncStatus({
+        type: "success",
+        message: `Berhasil menarik kurs terbaru dari Frankfurter: Rp ${latest.rate.toLocaleString("id-ID")} (Tanggal: ${latest.date})`,
+      });
+    } catch (err: any) {
+      setSyncStatus({
+        type: "error",
+        message: err.message || "Gagal mengambil kurs dari Frankfurter API",
+      });
+    } finally {
+      setIsSyncingLatest(false);
+    }
+  };
+
+  // Sync Full Historical Series from Frankfurter API
+  const handleSyncHistoricalFrankfurter = async () => {
+    setIsSyncingHistory(true);
+    setSyncStatus(null);
+    try {
+      const series = await fetchHistoricalFrankfurterSeries("2024-01-01");
+      if (onUpdateFullDataset) {
+        const merged = mergeFrankfurterDataIntoDataset(data, series);
+        onUpdateFullDataset(merged);
+        setSyncStatus({
+          type: "success",
+          message: `Berhasil menyinkronkan ${series.length} data historis kurs USD/IDR dari Frankfurter API!`,
+        });
+      }
+    } catch (err: any) {
+      setSyncStatus({
+        type: "error",
+        message: err.message || "Gagal menyinkronkan data historis dari Frankfurter API",
+      });
+    } finally {
+      setIsSyncingHistory(false);
+    }
+  };
+
+  // Extract only actual historical points
+  const actualHistory = useMemo(() => {
+    return data
+      .filter((d) => d.actual !== null && d.actual !== undefined)
+      .map((d, index, arr) => {
+        const prev = index > 0 ? arr[index - 1].actual : d.actual;
+        const change = (d.actual || 0) - (prev || d.actual || 0);
+        const changePct = prev ? ((change / prev) * 100).toFixed(2) : "0.00";
+        return {
+          ...d,
+          dailyChange: change,
+          dailyChangePct: changePct,
+          isDepreciation: change > 0, // In forex USD/IDR, positive change means Rupiah depreciated
+        };
+      });
+  }, [data]);
+
+  // Descriptive Statistics for Actual Rate
+  const stats = useMemo(() => {
+    if (actualHistory.length === 0) {
+      return { mean: 0, median: 0, min: 0, max: 0, stdDev: 0, count: 0 };
+    }
+    const values = actualHistory.map((d) => d.actual!).sort((a, b) => a - b);
+    const sum = values.reduce((a, b) => a + b, 0);
+    const mean = Math.round(sum / values.length);
+    const median = values[Math.floor(values.length / 2)];
+    const min = values[0];
+    const max = values[values.length - 1];
+
+    const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
+    const stdDev = Math.round(Math.sqrt(variance));
+
+    return { mean, median, min, max, stdDev, count: values.length };
+  }, [actualHistory]);
+
+  // Bank Indonesia Reference Rates Breakdown (Buy, Sell, JISDOR Mid)
+  const jisdorMid = currentSpot;
+  const bankBeli = Math.round(currentSpot * 0.993); // ~0.7% spread
+  const bankJual = Math.round(currentSpot * 1.007); // ~0.7% spread
+
+  const handleExportCSV = () => {
+    // CSV Header
+    let csvContent = "Tanggal,Kurs Aktual (USD/IDR),Perubahan Harian (Rp),Perubahan (%),MA(20),MA(50),DXY Index\n";
+    
+    // Rows
+    filteredRecords.slice().reverse().forEach(row => {
+      csvContent += `${row.date},${row.actual || ""},${row.dailyChange || ""},${row.dailyChangePct || ""},${row.ma20 || ""},${row.ma50 || ""},${row.dxyIndex || ""}\n`;
+    });
+
+    // Create Blob and Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Data_Kurs_Historis_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Filtered actual records
+  const filteredRecords = useMemo(() => {
+    return actualHistory.filter((item) => {
+      const matchSearch = searchDate ? item.date.includes(searchDate) : true;
+      const matchYear = selectedYear === "ALL" ? true : item.date.startsWith(selectedYear);
+      return matchSearch && matchYear;
+    });
+  }, [actualHistory, searchDate, selectedYear]);
+
+  // Handle Quick Input
+  const handleSaveRate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const rateNum = parseFloat(inputRate);
+    if (!inputDate || isNaN(rateNum) || rateNum <= 0) return;
+
+    onAddActualRate(inputDate, rateNum);
+    setSaveSuccess(`Kurs aktual Rp ${rateNum.toLocaleString("id-ID")} untuk tanggal ${inputDate} berhasil ditambahkan!`);
+    setInputRate("");
+    setTimeout(() => setSaveSuccess(null), 4000);
+  };
+
+  // Export to CSV
+  const handleExportActualCSV = () => {
+    const header = "date,actual_idr,daily_change,daily_change_pct,ma20,ma50\n";
+    const rows = actualHistory
+      .map(
+        (d) =>
+          `${d.date},${d.actual},${d.dailyChange},${d.dailyChangePct}%,${d.ma20 || ""},${d.ma50 || ""}`
+      )
+      .join("\n");
+
+    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `kurs_aktual_usdidr_${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+  };
+
+  return (
+    <div id="actual-rate-explorer" className="space-y-6">
+      {/* 1. Header & Live JISDOR Snapshot Cards */}
+      <div className={`${isLight ? "bg-white border-slate-200" : "bg-slate-900/90 border-slate-800"} border rounded-2xl p-5 shadow-sm transition-colors`}>
+        <div className={`flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b ${isLight ? "border-slate-200" : "border-slate-800"}`}>
+          <div>
+            <div className="flex items-center gap-2">
+              <Landmark className={`w-5 h-5 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
+              <h2 className={`text-lg font-bold tracking-tight ${isLight ? "text-slate-900" : "text-white"}`}>
+                Pusat Data Kurs Aktual USD/IDR & JISDOR Bank Indonesia
+              </h2>
+            </div>
+            <p className={`text-xs mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              Data historis resmi transaksi valas spot, kurs acuan JISDOR (*Jakarta Interbank Spot Dollar Rate*), dan kurs transaksi perbankan.
+            </p>
+          </div>
+
+          <button
+            onClick={handleExportActualCSV}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+              isLight
+                ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+            }`}
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Ekspor CSV Kurs Aktual</span>
+          </button>
+        </div>
+
+        {/* 4 Cards: JISDOR Mid, Kurs Beli, Kurs Jual, Spread */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-4">
+          {/* JISDOR Mid Rate */}
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
+            <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              <span>Kurs Acuan JISDOR (Spot)</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-emerald-950 text-emerald-300"
+              }`}>Mid Rate</span>
+            </div>
+            <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-emerald-700" : "text-emerald-400"}`}>
+              Rp {jisdorMid.toLocaleString("id-ID")}
+            </div>
+            <div className={`text-[11px] mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              Standar acuan resmi Bank Indonesia
+            </div>
+          </div>
+
+          {/* Kurs Beli Bank */}
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
+            <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              <span>Kurs Beli (Bank Buy)</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                isLight ? "bg-indigo-100 text-indigo-800 border border-indigo-200" : "bg-indigo-950 text-indigo-300"
+              }`}>Beli Valas</span>
+            </div>
+            <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-slate-900" : "text-slate-200"}`}>
+              Rp {bankBeli.toLocaleString("id-ID")}
+            </div>
+            <div className={`text-[11px] mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              Harga bank membeli USD dari Anda
+            </div>
+          </div>
+
+          {/* Kurs Jual Bank */}
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
+            <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              <span>Kurs Jual (Bank Sell)</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                isLight ? "bg-indigo-100 text-indigo-800 border border-indigo-200" : "bg-indigo-950 text-indigo-300"
+              }`}>Jual Valas</span>
+            </div>
+            <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-slate-900" : "text-slate-200"}`}>
+              Rp {bankJual.toLocaleString("id-ID")}
+            </div>
+            <div className={`text-[11px] mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              Harga bank menjual USD ke Anda
+            </div>
+          </div>
+
+          {/* Spread Bank */}
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
+            <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              <span>Spread Jual-Beli</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                isLight ? "bg-slate-200 text-slate-800 border border-slate-300" : "bg-slate-800 text-slate-300"
+              }`}>Margin</span>
+            </div>
+            <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-indigo-700" : "text-indigo-300"}`}>
+              Rp {(bankJual - bankBeli).toLocaleString("id-ID")}
+            </div>
+            <div className={`text-[11px] mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+              Rentang margin valas (~1.4%)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Frankfurter Live API Integration & Data Retrieval */}
+      <div className={`${
+        isLight
+          ? "bg-gradient-to-br from-indigo-50/90 via-white to-slate-50 border-indigo-200"
+          : "bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border-indigo-900/50"
+      } border rounded-2xl p-5 shadow-sm transition-colors`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b ${
+          isLight ? "border-indigo-100" : "border-indigo-900/40"
+        }`}>
+          <div className="flex items-center gap-2">
+            <Globe className={`w-5 h-5 ${isLight ? "text-indigo-600" : "text-indigo-400"}`} />
+            <div>
+              <h3 className={`text-sm font-bold flex items-center gap-2 ${isLight ? "text-slate-900" : "text-white"}`}>
+                Integrasi Frankfurter API (Kurs Aktual Live & Historis ECB)
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${
+                  isLight ? "bg-indigo-100 text-indigo-800 border-indigo-300" : "bg-indigo-950 text-indigo-300 border-indigo-700/50"
+                }`}>
+                  api.frankfurter.app
+                </span>
+              </h3>
+              <p className={`text-xs mt-0.5 ${isLight ? "text-slate-600" : "text-slate-300"}`}>
+                Tarik data nilai tukar resmi USD/IDR berbasis data publikasi European Central Bank (ECB) secara langsung.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+          {/* Button 1: Fetch Latest Spot */}
+          <div className={`${isLight ? "bg-white border-indigo-100 shadow-sm" : "bg-slate-950/70 border-indigo-900/30"} border p-3.5 rounded-xl flex flex-col justify-between`}>
+            <div>
+              <div className={`text-xs font-semibold flex items-center gap-1.5 mb-1 ${isLight ? "text-slate-900" : "text-white"}`}>
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>Tarik Kurs Spot Hari Ini</span>
+              </div>
+              <p className={`text-[11px] mb-3 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                Mengambil nilai kurs transaksi penutupan terakhir USD/IDR dari endpoint <code className={`${isLight ? "text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded" : "text-indigo-300"} font-mono`}>/latest</code>.
+              </p>
+            </div>
+            <button
+              onClick={handleSyncLatestFrankfurter}
+              disabled={isSyncingLatest || isSyncingHistory}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition shadow-sm"
+            >
+              {isSyncingLatest ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Globe className="w-3.5 h-3.5" />
+              )}
+              <span>{isSyncingLatest ? "Mengambil Data..." : "Tarik Spot Terbaru"}</span>
+            </button>
+          </div>
+
+          {/* Button 2: Fetch Full History Series */}
+          <div className={`${isLight ? "bg-white border-indigo-100 shadow-sm" : "bg-slate-950/70 border-indigo-900/30"} border p-3.5 rounded-xl flex flex-col justify-between`}>
+            <div>
+              <div className={`text-xs font-semibold flex items-center gap-1.5 mb-1 ${isLight ? "text-slate-900" : "text-white"}`}>
+                <RefreshCw className={`w-3.5 h-3.5 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
+                <span>Sinkronkan Seluruh Deret Historis (2024 - Sekarang)</span>
+              </div>
+              <p className={`text-[11px] mb-3 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                Mengunduh seluruh runtun waktu time-series harian USD/IDR dari Frankfurter API dan memperbarui grafik serta metrik error.
+              </p>
+            </div>
+            <button
+              onClick={handleSyncHistoricalFrankfurter}
+              disabled={isSyncingLatest || isSyncingHistory}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition shadow-sm"
+            >
+              {isSyncingHistory ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span>{isSyncingHistory ? "Menyinkronkan Deret Waktu..." : "Tarik Data Historis Frankfurter"}</span>
+            </button>
+          </div>
+        </div>
+
+        {syncStatus && (
+          <div
+            className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${
+              syncStatus.type === "success"
+                ? isLight
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                  : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
+                : isLight
+                ? "bg-rose-50 border-rose-300 text-rose-800"
+                : "bg-rose-950/70 border-rose-700/60 text-rose-300"
+            }`}
+          >
+            {syncStatus.type === "success" ? (
+              <CheckCircle2 className={`w-4 h-4 shrink-0 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
+            ) : (
+              <AlertCircle className={`w-4 h-4 shrink-0 ${isLight ? "text-rose-600" : "text-rose-400"}`} />
+            )}
+            <span>{syncStatus.message}</span>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Quick Input Form for Actual Rate */}
+      <div className={`${isLight ? "bg-white border-slate-200" : "bg-slate-900/90 border-slate-800"} border rounded-2xl p-5 shadow-sm transition-colors`}>
+        <h3 className={`text-sm font-bold flex items-center gap-2 mb-2 ${isLight ? "text-slate-900" : "text-white"}`}>
+          <Plus className={`w-4 h-4 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
+          Input & Perbarui Kurs Aktual Hari Ini
+        </h3>
+        <p className={`text-xs mb-4 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+          Masukkan kurs realisasi terbaru untuk menambahkan titik data baru ke dalam grafik historis dan menghitung ulang akurasi model secara instan.
+        </p>
+
+        <form onSubmit={handleSaveRate} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+          <div className="sm:col-span-4">
+            <label className={`text-[11px] font-semibold block mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+              Tanggal Transaksi:
+            </label>
+            <input
+              type="date"
+              value={inputDate}
+              onChange={(e) => setInputDate(e.target.value)}
+              className={`w-full border rounded-lg px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-emerald-500 focus:outline-none ${
+                isLight ? "bg-slate-50 border-slate-300 text-slate-900" : "bg-slate-950 border-slate-700 text-slate-200"
+              }`}
+              required
+            />
+          </div>
+
+          <div className="sm:col-span-5">
+            <label className={`text-[11px] font-semibold block mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+              Nilai Kurs Aktual USD/IDR (Rp):
+            </label>
+            <div className="relative">
+              <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                Rp
+              </span>
+              <input
+                type="number"
+                step="1"
+                placeholder="Contoh: 17844"
+                value={inputRate}
+                onChange={(e) => setInputRate(e.target.value)}
+                className={`w-full border rounded-lg pl-9 pr-3 py-2 font-mono text-xs font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none ${
+                  isLight ? "bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400" : "bg-slate-950 border-slate-700 text-white"
+                }`}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="sm:col-span-3">
+            <button
+              type="submit"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2 px-4 rounded-lg flex items-center justify-center gap-1.5 transition shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Simpan Kurs Aktual</span>
+            </button>
+          </div>
+        </form>
+
+        {saveSuccess && (
+          <div className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${
+            isLight ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
+          }`}>
+            <CheckCircle2 className={`w-4 h-4 shrink-0 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
+            <span>{saveSuccess}</span>
+          </div>
+        )}
+      </div>
+
+      {/* 4. Statistical Summary of Actual Data */}
+      <div className={`${isLight ? "bg-white border-slate-200" : "bg-slate-900/90 border-slate-800"} border rounded-2xl p-5 shadow-sm transition-colors`}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className={`text-sm font-bold flex items-center gap-2 ${isLight ? "text-slate-900" : "text-white"}`}>
+            <BarChart3 className={`w-4 h-4 ${isLight ? "text-indigo-600" : "text-indigo-400"}`} />
+            Statistik Deskriptif Kurs Aktual ({stats.count} Hari Perdagangan)
+          </h3>
+          <span className={`text-[11px] font-mono ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+            Rentang: Rp {stats.min.toLocaleString("id-ID")} - Rp {stats.max.toLocaleString("id-ID")}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/60 border-slate-800"} p-3 rounded-xl border`}>
+            <span className={`text-[10px] uppercase font-semibold ${isLight ? "text-slate-600" : "text-slate-400"}`}>Rata-Rata (Mean)</span>
+            <div className={`text-base font-bold font-mono mt-0.5 ${isLight ? "text-slate-900" : "text-white"}`}>
+              Rp {stats.mean.toLocaleString("id-ID")}
+            </div>
+          </div>
+
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/60 border-slate-800"} p-3 rounded-xl border`}>
+            <span className={`text-[10px] uppercase font-semibold ${isLight ? "text-slate-600" : "text-slate-400"}`}>Nilai Tengah (Median)</span>
+            <div className={`text-base font-bold font-mono mt-0.5 ${isLight ? "text-slate-900" : "text-white"}`}>
+              Rp {stats.median.toLocaleString("id-ID")}
+            </div>
+          </div>
+
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/60 border-slate-800"} p-3 rounded-xl border`}>
+            <span className={`text-[10px] uppercase font-semibold ${isLight ? "text-slate-600" : "text-slate-400"}`}>Kurs Terendah (Min)</span>
+            <div className={`text-base font-bold font-mono mt-0.5 ${isLight ? "text-emerald-700" : "text-emerald-400"}`}>
+              Rp {stats.min.toLocaleString("id-ID")}
+            </div>
+          </div>
+
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/60 border-slate-800"} p-3 rounded-xl border`}>
+            <span className={`text-[10px] uppercase font-semibold ${isLight ? "text-slate-600" : "text-slate-400"}`}>Kurs Tertinggi (Max)</span>
+            <div className={`text-base font-bold font-mono mt-0.5 ${isLight ? "text-rose-700" : "text-rose-400"}`}>
+              Rp {stats.max.toLocaleString("id-ID")}
+            </div>
+          </div>
+
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/60 border-slate-800"} p-3 rounded-xl border`}>
+            <span className={`text-[10px] uppercase font-semibold ${isLight ? "text-slate-600" : "text-slate-400"}`}>Standar Deviasi (σ)</span>
+            <div className={`text-base font-bold font-mono mt-0.5 ${isLight ? "text-slate-900" : "text-slate-200"}`}>
+              Rp {stats.stdDev}
+            </div>
+          </div>
+
+          <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/60 border-slate-800"} p-3 rounded-xl border`}>
+            <span className={`text-[10px] uppercase font-semibold ${isLight ? "text-slate-600" : "text-slate-400"}`}>Volatilitas Range</span>
+            <div className={`text-base font-bold font-mono mt-0.5 ${isLight ? "text-indigo-700" : "text-indigo-300"}`}>
+              Rp {(stats.max - stats.min).toLocaleString("id-ID")}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Complete Table of Actual Records */}
+      <div className={`${isLight ? "bg-white border-slate-200" : "bg-slate-900/90 border-slate-800"} border rounded-2xl overflow-hidden shadow-sm transition-colors`}>
+        {/* Table Filter Toolbar */}
+        <div className={`p-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
+          isLight ? "border-slate-200 bg-slate-50" : "border-slate-800 bg-slate-950/60"
+        }`}>
+          <div className="flex items-center gap-2">
+            <Calendar className={`w-4 h-4 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
+            <h3 className={`text-sm font-bold ${isLight ? "text-slate-900" : "text-white"}`}>
+              Tabel Deret Waktu Kurs Aktual Lengkap
+            </h3>
+            <span className={`text-xs font-mono ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+              ({filteredRecords.length} Baris)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${isLight ? "text-slate-400" : "text-slate-500"}`} />
+              <input
+                type="text"
+                placeholder="Cari tanggal (YYYY-MM)..."
+                value={searchDate}
+                onChange={(e) => setSearchDate(e.target.value)}
+                className={`border rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44 ${
+                  isLight
+                    ? "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
+                    : "bg-slate-900 border-slate-700 text-slate-200"
+                }`}
+              />
+            </div>
+
+            {/* Year filter */}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className={`border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none cursor-pointer ${
+                isLight ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-200"
+              }`}
+            >
+              <option value="ALL">Semua Tahun</option>
+              <option value="2026">Tahun 2026</option>
+              <option value="2025">Tahun 2025</option>
+              <option value="2024">Tahun 2024</option>
+            </select>
+
+            <button
+              onClick={handleExportCSV}
+              className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center justify-center"
+              title="Unduh CSV Data Aktual"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Table Body */}
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className={`w-full text-left text-xs ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+            <thead className={`sticky top-0 uppercase tracking-wider font-semibold text-[10px] border-b ${
+              isLight ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-slate-950 text-slate-400 border-slate-800"
+            }`}>
+              <tr>
+                <th className="py-2.5 px-4">Tanggal</th>
+                <th className="py-2.5 px-3 text-right">Kurs Aktual (USD/IDR)</th>
+                <th className="py-2.5 px-3 text-right">Perubahan Harian (Rp)</th>
+                <th className="py-2.5 px-3 text-right">Perubahan (%)</th>
+                <th className="py-2.5 px-3 text-right">MA(20)</th>
+                <th className="py-2.5 px-3 text-right">MA(50)</th>
+                <th className="py-2.5 px-3 text-right">DXY Index</th>
+                <th className="py-2.5 px-4 text-center">Status IDR</th>
+              </tr>
+            </thead>
+            <tbody className={`divide-y ${isLight ? "divide-slate-200" : "divide-slate-800/60"}`}>
+              {filteredRecords.slice().reverse().map((row, idx) => (
+                <tr key={idx} className={`${isLight ? "hover:bg-slate-50" : "hover:bg-slate-800/40"} transition`}>
+                  <td className={`py-2.5 px-4 font-mono font-medium ${isLight ? "text-slate-900" : "text-slate-200"}`}>
+                    {row.date}
+                  </td>
+                  <td className={`py-2.5 px-3 text-right font-bold font-mono text-sm ${isLight ? "text-emerald-700" : "text-emerald-400"}`}>
+                    Rp {row.actual?.toLocaleString("id-ID")}
+                  </td>
+                  <td
+                    className={`py-2.5 px-3 text-right font-mono font-semibold ${
+                      row.dailyChange > 0
+                        ? isLight ? "text-rose-600" : "text-rose-400"
+                        : row.dailyChange < 0
+                        ? isLight ? "text-emerald-600" : "text-emerald-400"
+                        : isLight ? "text-slate-500" : "text-slate-400"
+                    }`}
+                  >
+                    {row.dailyChange > 0
+                      ? `+Rp ${row.dailyChange}`
+                      : row.dailyChange < 0
+                      ? `-Rp ${Math.abs(row.dailyChange)}`
+                      : "Rp 0"}
+                  </td>
+                  <td
+                    className={`py-2.5 px-3 text-right font-mono font-semibold ${
+                      row.dailyChange > 0
+                        ? isLight ? "text-rose-600" : "text-rose-400"
+                        : row.dailyChange < 0
+                        ? isLight ? "text-emerald-600" : "text-emerald-400"
+                        : isLight ? "text-slate-500" : "text-slate-400"
+                    }`}
+                  >
+                    {row.dailyChange > 0 ? `+${row.dailyChangePct}%` : `${row.dailyChangePct}%`}
+                  </td>
+                  <td className={`py-2.5 px-3 text-right font-mono ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                    {row.ma20 ? `Rp ${row.ma20.toLocaleString("id-ID")}` : "-"}
+                  </td>
+                  <td className={`py-2.5 px-3 text-right font-mono ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                    {row.ma50 ? `Rp ${row.ma50.toLocaleString("id-ID")}` : "-"}
+                  </td>
+                  <td className={`py-2.5 px-3 text-right font-mono ${isLight ? "text-indigo-600 font-medium" : "text-indigo-300"}`}>
+                    {row.dxy || "103.8"}
+                  </td>
+                  <td className="py-2.5 px-4 text-center">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                        row.dailyChange > 0
+                          ? isLight
+                            ? "bg-rose-50 text-rose-700 border border-rose-200"
+                            : "bg-rose-950/70 text-rose-300 border border-rose-800/50"
+                          : row.dailyChange < 0
+                          ? isLight
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-emerald-950/70 text-emerald-300 border border-emerald-800/50"
+                          : isLight
+                          ? "bg-slate-100 text-slate-600 border border-slate-200"
+                          : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      {row.dailyChange > 0 ? (
+                        <>
+                          <ArrowUpRight className="w-3 h-3" />
+                          Melemah
+                        </>
+                      ) : row.dailyChange < 0 ? (
+                        <>
+                          <ArrowDownRight className="w-3 h-3" />
+                          Menguat
+                        </>
+                      ) : (
+                        "Stabil"
+                      )}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};

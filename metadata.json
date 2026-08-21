@@ -1,0 +1,6 @@
+{
+  "name": "USD/IDR Forecasting Dashboard",
+  "description": "Dashboard analitik prediksi nilai tukar Rupiah terhadap Dolar AS (USD/IDR) dengan visualisasi nilai aktual vs forecast, error metrics (MAPE, RMSE, MAE, R²), confidence interval band, residual analysis, dan AI Macro Insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
