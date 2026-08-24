@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Header } from "./components/Header";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, MainTabType } from "./components/Sidebar";
 import { MetricCards } from "./components/MetricCards";
 import { MainForexChart } from "./components/MainForexChart";
 import { ActualRateExplorer } from "./components/ActualRateExplorer";
@@ -13,38 +13,46 @@ import { ModelComparisonView } from "./components/ModelComparisonView";
 import { ResidualAnalysisView } from "./components/ResidualAnalysisView";
 import { MacroDriversView } from "./components/MacroDriversView";
 import { ScenarioSimulator } from "./components/ScenarioSimulator";
+import { BacktestReplayView } from "./components/BacktestReplayView";
 import { AiAnalystPanel } from "./components/AiAnalystPanel";
 import { RateLookupPanel } from "./components/RateLookupPanel";
+import { CurrencySelector } from "./components/CurrencySelector";
 import { DataModelManagerModal } from "./components/DataModelManagerModal";
 import { InfoModal } from "./components/InfoModal";
 import {
   initialForexData,
   modelProfiles,
   macroFactors,
+  currencyProfiles,
   generateDatasetForModel,
 } from "./data/mockForexData";
-import { ForexDataPoint, ModelProfile, ModelType } from "./types";
+import { ForexDataPoint, ModelProfile, ModelType, CurrencyCode } from "./types";
 import { calculateMetrics, enrichWithMovingAverages } from "./utils/metricsCalculator";
 import { fetchLatestFrankfurterRate } from "./utils/frankfurterService";
 import {
   TrendingUp,
+  Layers,
+  BarChart2,
+  PieChart,
+  Sliders,
   Sparkles,
   ShieldCheck,
-  Activity,
-  Layers,
-  Database,
-  Info,
+  Globe,
 } from "lucide-react";
 
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 
 function DashboardContent() {
   const { theme } = useTheme();
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>("USD");
   const [data, setData] = useState<ForexDataPoint[]>(initialForexData);
   const [selectedModelId, setSelectedModelId] = useState<ModelType>("ensemble");
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "actuals" | "comparison" | "residuals" | "macro" | "simulator"
-  >("overview");
+  const [activeTab, setActiveTab] = useState<MainTabType>("overview");
+  
+  // Sub-tabs for consolidated views
+  const [analysisSubTab, setAnalysisSubTab] = useState<"actuals" | "comparison" | "residuals">("actuals");
+  const [macroSubTab, setMacroSubTab] = useState<"macro" | "simulator">("macro");
+
   const [isDataManagerOpen, setIsDataManagerOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -73,17 +81,26 @@ function DashboardContent() {
     const future = data.filter((d) => d.isFuture && d.forecast !== null);
     const lastFuture = future[future.length - 1] || lastHist;
 
+    const currProfile = currencyProfiles.find((c) => c.code === selectedCurrency);
+    const fallbackSpot = currProfile ? currProfile.baseRate : 17705;
+
     return {
-      currentSpot: lastHist?.actual || 17844,
-      previousSpot: prevHist?.actual || 17838,
-      forecast30d: lastFuture?.forecast || 17930,
+      currentSpot: lastHist?.actual || fallbackSpot,
+      previousSpot: prevHist?.actual || fallbackSpot,
+      forecast30d: lastFuture?.forecast || Math.round(fallbackSpot * 1.012),
     };
-  }, [data]);
+  }, [data, selectedCurrency]);
 
   const handleSelectModel = (modelId: ModelType) => {
     setSelectedModelId(modelId);
-    const newModelData = generateDatasetForModel(modelId, data);
+    const newModelData = generateDatasetForModel(modelId, data, selectedCurrency);
     setData(newModelData);
+  };
+
+  const handleSelectCurrency = (newCurr: CurrencyCode) => {
+    setSelectedCurrency(newCurr);
+    const newDataset = generateDatasetForModel(selectedModelId, undefined, newCurr);
+    setData(enrichWithMovingAverages(newDataset));
   };
 
   const handleSaveData = (newData: ForexDataPoint[]) => {
@@ -91,7 +108,7 @@ function DashboardContent() {
   };
 
   const handleResetToDefault = () => {
-    setData(generateDatasetForModel(selectedModelId));
+    setData(generateDatasetForModel(selectedModelId, undefined, selectedCurrency));
   };
 
   const handleAddActualRate = (newDateStr: string, actualVal: number) => {
@@ -117,14 +134,14 @@ function DashboardContent() {
       updated = [...data, newPoint].sort((a, b) => a.date.localeCompare(b.date));
     }
 
-    const recalibrated = generateDatasetForModel(selectedModelId, updated);
+    const recalibrated = generateDatasetForModel(selectedModelId, updated, selectedCurrency);
     setData(enrichWithMovingAverages(recalibrated));
   };
 
   const handleRefreshData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const latestSpot = await fetchLatestFrankfurterRate().catch(() => null);
+      const latestSpot = await fetchLatestFrankfurterRate(selectedCurrency).catch(() => null);
       
       let baseDataset = [...data];
       if (latestSpot && latestSpot.rate) {
@@ -148,21 +165,21 @@ function DashboardContent() {
         }
       }
 
-      const recalibrated = generateDatasetForModel(selectedModelId, baseDataset);
+      const recalibrated = generateDatasetForModel(selectedModelId, baseDataset, selectedCurrency);
       setData(enrichWithMovingAverages(recalibrated));
       setLastSyncTime(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     } catch {
-      const recalibrated = generateDatasetForModel(selectedModelId, data);
+      const recalibrated = generateDatasetForModel(selectedModelId, data, selectedCurrency);
       setData(enrichWithMovingAverages(recalibrated));
     } finally {
       setIsSyncing(false);
     }
-  }, [data, selectedModelId]);
+  }, [data, selectedModelId, selectedCurrency]);
 
   useEffect(() => {
     handleRefreshData();
 
-    // Setup live polling every 5 minutes (300000ms) to keep data "real-time"
+    // Setup live polling every 5 minutes (300000ms)
     const interval = setInterval(() => {
       handleRefreshData();
     }, 300000);
@@ -171,8 +188,8 @@ function DashboardContent() {
   }, []);
 
   return (
-    <div className="h-screen bg-slate-50 dark:bg-[#0b0f19] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200 overflow-hidden">
-      {/* Header */}
+    <div className="h-screen bg-slate-50 dark:bg-[#070a10] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-200 overflow-hidden">
+      {/* Top Header */}
       <Header
         currentSpot={currentSpot}
         previousSpot={previousSpot}
@@ -180,11 +197,12 @@ function DashboardContent() {
         models={modelProfiles}
         onSelectModel={handleSelectModel}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        selectedCurrency={selectedCurrency}
       />
 
       {/* Main Layout Body */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Collapsible Sidebar */}
+        {/* Consolidated Sidebar */}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -197,93 +215,199 @@ function DashboardContent() {
         />
 
         {/* Scrollable Content Area */}
-        <main className="flex-1 overflow-y-auto w-full p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto space-y-8">
-            {/* TAB 1: OVERVIEW (FORECASTING & ERROR METRICS) */}
-        {activeTab === "overview" && (
-          <div className="space-y-6">
-            {/* 1. Error Metrics Cards Grid */}
-            <MetricCards
-              metrics={activeMetrics}
-              modelName={selectedModel.name}
-              currentSpot={currentSpot}
-              forecast30d={forecast30d}
-            />
+        <main className="flex-1 overflow-y-auto w-full p-3 sm:p-5 lg:p-6">
+          <div className="max-w-7xl mx-auto space-y-5">
 
-            {/* 2. Main Interactive Chart (Actual vs Forecast) */}
-            <MainForexChart
-              data={data}
-              selectedModel={selectedModel}
-              currentSpot={currentSpot}
-            />
+            {/* TAB 1: DASHBOARD (OVERVIEW, METRICS, CHART & AI INSIGHTS) */}
+            {activeTab === "overview" && (
+              <div className="space-y-4">
+                {/* Control Toolbar: Currency Switcher & Workspace Context */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-2.5 sm:px-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+                      Mata Uang Acuan:
+                    </span>
+                    <CurrencySelector
+                      selectedCurrency={selectedCurrency}
+                      onSelectCurrency={handleSelectCurrency}
+                      currentSpot={currentSpot}
+                    />
+                  </div>
 
-            {/* 3. Rate Lookup Panel (Date Search) */}
-            <RateLookupPanel 
-              data={data} 
-              selectedModelName={selectedModel.name} 
-            />
+                  <div className="flex items-center gap-3 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                      <span>Model: <b className="text-slate-700 dark:text-slate-200 font-semibold">{selectedModel.name}</b></span>
+                    </div>
+                    {lastSyncTime && (
+                      <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
+                        • Sinkron: {lastSyncTime} WIB
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-            {/* 4. AI Macro Insights */}
-            <div className="grid grid-cols-1 gap-6">
-              <AiAnalystPanel
-                currentSpot={currentSpot}
-                forecast30d={forecast30d}
-                selectedModel={selectedModel}
-                metrics={activeMetrics}
+                {/* 1. Error Metrics Cards Grid */}
+                <MetricCards
+                  metrics={activeMetrics}
+                  modelName={selectedModel.name}
+                  currentSpot={currentSpot}
+                  forecast30d={forecast30d}
+                />
+
+                {/* 2. Main Interactive Chart (Actual vs Forecast) */}
+                <MainForexChart
+                  data={data}
+                  selectedModel={selectedModel}
+                  currentSpot={currentSpot}
+                />
+
+                {/* 3. Rate Lookup Panel (Date Search) */}
+                <RateLookupPanel 
+                  data={data} 
+                  selectedModelName={selectedModel.name} 
+                />
+
+                {/* 4. AI Macro Insights */}
+                <AiAnalystPanel
+                  currentSpot={currentSpot}
+                  forecast30d={forecast30d}
+                  selectedModel={selectedModel}
+                  metrics={activeMetrics}
+                />
+              </div>
+            )}
+
+            {/* TAB 2: ANALISIS & VALIDASI (SUB-TABS: ACTUALS, BENCHMARK, RESIDUALS) */}
+            {activeTab === "analysis" && (
+              <div className="space-y-4">
+                {/* Clean Enterprise Sub-Navigation Pills */}
+                <div className="flex items-center gap-1 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm overflow-x-auto no-scrollbar">
+                  <button
+                    onClick={() => setAnalysisSubTab("actuals")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      analysisSubTab === "actuals"
+                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Kurs Aktual JISDOR</span>
+                  </button>
+
+                  <button
+                    onClick={() => setAnalysisSubTab("comparison")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      analysisSubTab === "comparison"
+                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Model Benchmark</span>
+                  </button>
+
+                  <button
+                    onClick={() => setAnalysisSubTab("residuals")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      analysisSubTab === "residuals"
+                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <BarChart2 className="w-3.5 h-3.5" />
+                    <span>Analisis Residu & Galat</span>
+                  </button>
+                </div>
+
+                {/* Sub-view Rendering */}
+                {analysisSubTab === "actuals" && (
+                  <ActualRateExplorer
+                    data={data}
+                    onAddActualRate={handleAddActualRate}
+                    onUpdateFullDataset={handleSaveData}
+                    currentSpot={currentSpot}
+                  />
+                )}
+
+                {analysisSubTab === "comparison" && (
+                  <ModelComparisonView
+                    models={modelProfiles}
+                    selectedModel={selectedModel}
+                    onSelectModel={handleSelectModel}
+                  />
+                )}
+
+                {analysisSubTab === "residuals" && (
+                  <ResidualAnalysisView
+                    data={data}
+                    selectedModel={selectedModel}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: MAKRO & SIMULASI (SUB-TABS: MACRO DRIVERS, SCENARIO SIMULATOR) */}
+            {activeTab === "macro-sim" && (
+              <div className="space-y-4">
+                {/* Clean Enterprise Sub-Navigation Pills */}
+                <div className="flex items-center gap-1 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm overflow-x-auto no-scrollbar">
+                  <button
+                    onClick={() => setMacroSubTab("macro")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      macroSubTab === "macro"
+                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <PieChart className="w-3.5 h-3.5" />
+                    <span>Faktor Makro & Live Feed</span>
+                  </button>
+
+                  <button
+                    onClick={() => setMacroSubTab("simulator")}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      macroSubTab === "simulator"
+                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>Simulasi Skenario (What-If)</span>
+                  </button>
+                </div>
+
+                {/* Sub-view Rendering */}
+                {macroSubTab === "macro" && (
+                  <MacroDriversView macroFactors={macroFactors} />
+                )}
+
+                {macroSubTab === "simulator" && (
+                  <ScenarioSimulator
+                    data={data}
+                    currentSpot={currentSpot}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* TAB 4: BACKTESTING & TIME-TRAVEL REPLAY */}
+            {activeTab === "backtest" && (
+              <BacktestReplayView
+                data={data}
+                selectedCurrency={selectedCurrency}
               />
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: DATA KURS AKTUAL (JISDOR & SPOT EXPLORER) */}
-        {activeTab === "actuals" && (
-          <ActualRateExplorer
-            data={data}
-            onAddActualRate={handleAddActualRate}
-            onUpdateFullDataset={handleSaveData}
-            currentSpot={currentSpot}
-          />
-        )}
-
-        {/* TAB 3: MODEL COMPARISON */}
-        {activeTab === "comparison" && (
-          <ModelComparisonView
-            models={modelProfiles}
-            selectedModel={selectedModel}
-            onSelectModel={handleSelectModel}
-          />
-        )}
-
-        {/* TAB 3: RESIDUAL & ERROR DIAGNOSTICS */}
-        {activeTab === "residuals" && (
-          <ResidualAnalysisView
-            data={data}
-            selectedModel={selectedModel}
-          />
-        )}
-
-        {/* TAB 4: MACRO DRIVERS & CORRELATIONS */}
-        {activeTab === "macro" && (
-          <MacroDriversView macroFactors={macroFactors} />
-        )}
-
-        {/* TAB 5: SCENARIO SIMULATOR (WHAT-IF) */}
-        {activeTab === "simulator" && (
-          <ScenarioSimulator
-            data={data}
-            currentSpot={currentSpot}
-          />
-        )}
+            )}
           </div>
 
           {/* Footer */}
-          <footer className="mt-auto py-5 text-center text-xs text-slate-500 border-t border-slate-200 dark:border-slate-800">
+          <footer className="mt-8 py-4 text-center text-xs text-slate-400 dark:text-slate-500 border-t border-slate-200 dark:border-slate-800/80">
             <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-              <span>USD/IDR Forex Forecasting & Analytics Studio • Bank Indonesia JISDOR & Market Data Reference</span>
-              <div className="flex items-center gap-4 text-[11px] text-slate-500 dark:text-slate-400">
-                <span>Metrik: MAPE, RMSE, MAE, R², MDA</span>
+              <span className="font-mono text-[11px]">{selectedCurrency}/IDR Forecasting Studio • Bank Indonesia JISDOR & Market Data</span>
+              <div className="flex items-center gap-3 text-[10px] font-mono">
+                <span>99% Confidence Interval</span>
                 <span>•</span>
-                <span>Ekonometrika & Machine Learning</span>
+                <span>Ensemble ML & Econometrics</span>
               </div>
             </div>
           </footer>
