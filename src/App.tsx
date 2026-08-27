@@ -262,15 +262,7 @@ function DashboardContent() {
                   </div>
                 </div>
 
-                {/* 1. Error Metrics Cards Grid */}
-                <MetricCards
-                  metrics={activeMetrics}
-                  modelName={selectedModel.name}
-                  currentSpot={currentSpot}
-                  forecast30d={forecast30d}
-                />
-
-                {/* 2. Chart Mode Switcher (Realtime Live Feed vs Time-Series Horizon Forecast) */}
+                {/* 1. Chart Mode Switcher (Realtime Live Feed vs Time-Series Horizon Forecast) */}
                 <div className="flex items-center justify-between gap-2 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm">
                   <div className="flex items-center gap-1.5">
                     <button
@@ -305,7 +297,7 @@ function DashboardContent() {
                   </span>
                 </div>
 
-                {/* 3. Interactive Chart Display */}
+                {/* 2. Interactive Chart Display */}
                 {overviewChartMode === "realtime" ? (
                   <RealtimeForexChart
                     selectedCurrency={selectedCurrency}
@@ -319,13 +311,13 @@ function DashboardContent() {
                   />
                 )}
 
-                {/* 4. Rate Lookup Panel (Date Search & Continuous Projection) */}
+                {/* 3. Rate Lookup Panel (Date Search & Continuous Projection) */}
                 <RateLookupPanel 
                   data={data} 
                   selectedModelName={selectedModel.name} 
                 />
 
-                {/* 5. AI Macro Insights */}
+                {/* 4. AI Macro Insights */}
                 <AiAnalystPanel
                   currentSpot={currentSpot}
                   forecast30d={forecast30d}
@@ -338,6 +330,14 @@ function DashboardContent() {
             {/* TAB 2: ANALISIS & VALIDASI (SUB-TABS: ACTUALS, BENCHMARK, RESIDUALS) */}
             {activeTab === "analysis" && (
               <div className="space-y-4">
+                {/* 1. Validation & Error Metrics Cards Grid (Data Science & Validation HUD) */}
+                <MetricCards
+                  metrics={activeMetrics}
+                  modelName={selectedModel.name}
+                  currentSpot={currentSpot}
+                  forecast30d={forecast30d}
+                />
+
                 {/* Clean Enterprise Sub-Navigation Pills */}
                 <div className="flex items-center gap-1 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm overflow-x-auto no-scrollbar">
                   <button
