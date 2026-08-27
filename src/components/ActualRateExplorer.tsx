@@ -2,101 +2,30 @@ import React, { useState, useMemo } from "react";
 import {
   Calendar,
   Landmark,
-  Plus,
   Search,
   Download,
-  CheckCircle2,
-  AlertCircle,
   ArrowUpRight,
   ArrowDownRight,
   BarChart3,
-  Globe,
-  RefreshCw,
-  Zap,
 } from "lucide-react";
 import { ForexDataPoint } from "../types";
 import { useTheme } from "../context/ThemeContext";
-import {
-  fetchLatestFrankfurterRate,
-  fetchHistoricalFrankfurterSeries,
-  mergeFrankfurterDataIntoDataset,
-} from "../utils/frankfurterService";
 
 interface ActualRateExplorerProps {
   data: ForexDataPoint[];
-  onAddActualRate: (date: string, actualValue: number) => void;
+  onAddActualRate?: (date: string, actualValue: number) => void;
   onUpdateFullDataset?: (newData: ForexDataPoint[]) => void;
   currentSpot: number;
 }
 
 export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
   data,
-  onAddActualRate,
-  onUpdateFullDataset,
   currentSpot,
 }) => {
   const { theme } = useTheme();
   const isLight = theme === "light";
   const [searchDate, setSearchDate] = useState("");
   const [selectedYear, setSelectedYear] = useState<string>("ALL");
-  const [inputDate, setInputDate] = useState(new Date().toISOString().split("T")[0]);
-  const [inputRate, setInputRate] = useState<string>("");
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
-  const [isSyncingLatest, setIsSyncingLatest] = useState(false);
-  const [isSyncingHistory, setIsSyncingHistory] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{ type: "success" | "error"; message: string } | null>(
-    null
-  );
-
-  // Sync Latest Spot from Frankfurter API
-  const handleSyncLatestFrankfurter = async () => {
-    setIsSyncingLatest(true);
-    setSyncStatus(null);
-    try {
-      const latest = await fetchLatestFrankfurterRate();
-      onAddActualRate(latest.date, latest.rate);
-      const sourceName = latest.source === "jisdor_bi_consensus"
-        ? "Konsensus Resmi JISDOR BI"
-        : latest.source === "open_er_api_live" || latest.source === "open_er_api_direct"
-          ? "Live Spot Feed (Open ER API)"
-          : "Frankfurter API (European Central Bank)";
-      setSyncStatus({
-        type: "success",
-        message: `Berhasil menarik kurs terbaru (${sourceName}): Rp ${latest.rate.toLocaleString("id-ID")} (Tanggal: ${latest.date})`,
-      });
-    } catch (err: any) {
-      setSyncStatus({
-        type: "error",
-        message: err.message || "Gagal mengambil kurs dari Frankfurter API",
-      });
-    } finally {
-      setIsSyncingLatest(false);
-    }
-  };
-
-  // Sync Full Historical Series from Frankfurter API
-  const handleSyncHistoricalFrankfurter = async () => {
-    setIsSyncingHistory(true);
-    setSyncStatus(null);
-    try {
-      const series = await fetchHistoricalFrankfurterSeries("2024-01-01");
-      if (onUpdateFullDataset) {
-        const merged = mergeFrankfurterDataIntoDataset(data, series);
-        onUpdateFullDataset(merged);
-        setSyncStatus({
-          type: "success",
-          message: `Berhasil menyinkronkan ${series.length} data historis kurs USD/IDR dari Frankfurter API!`,
-        });
-      }
-    } catch (err: any) {
-      setSyncStatus({
-        type: "error",
-        message: err.message || "Gagal menyinkronkan data historis dari Frankfurter API",
-      });
-    } finally {
-      setIsSyncingHistory(false);
-    }
-  };
 
   // Extract only actual historical points
   const actualHistory = useMemo(() => {
@@ -166,18 +95,6 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
       return matchSearch && matchYear;
     });
   }, [actualHistory, searchDate, selectedYear]);
-
-  // Handle Quick Input
-  const handleSaveRate = (e: React.FormEvent) => {
-    e.preventDefault();
-    const rateNum = parseFloat(inputRate);
-    if (!inputDate || isNaN(rateNum) || rateNum <= 0) return;
-
-    onAddActualRate(inputDate, rateNum);
-    setSaveSuccess(`Kurs aktual Rp ${rateNum.toLocaleString("id-ID")} untuk tanggal ${inputDate} berhasil ditambahkan!`);
-    setInputRate("");
-    setTimeout(() => setSaveSuccess(null), 4000);
-  };
 
   // Export to CSV
   const handleExportActualCSV = () => {
@@ -288,169 +205,6 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* 2. Frankfurter Live API Integration & Data Retrieval */}
-      <div className={`${isLight
-        ? "bg-gradient-to-br from-indigo-50/90 via-white to-slate-50 border-indigo-200"
-        : "bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border-indigo-900/50"
-        } border rounded-2xl p-5 shadow-sm transition-colors`}>
-        <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b ${isLight ? "border-indigo-100" : "border-indigo-900/40"
-          }`}>
-          <div className="flex items-center gap-2">
-            <Globe className={`w-5 h-5 ${isLight ? "text-indigo-600" : "text-indigo-400"}`} />
-            <div>
-              <h3 className={`text-sm font-bold flex items-center gap-2 ${isLight ? "text-slate-900" : "text-white"}`}>
-                Integrasi Frankfurter API (Kurs Aktual Live & Historis ECB)
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${isLight ? "bg-indigo-100 text-indigo-800 border-indigo-300" : "bg-indigo-950 text-indigo-300 border-indigo-700/50"
-                  }`}>
-                  api.frankfurter.app
-                </span>
-              </h3>
-              <p className={`text-xs mt-0.5 ${isLight ? "text-slate-600" : "text-slate-300"}`}>
-                Tarik data nilai tukar resmi USD/IDR berbasis data publikasi European Central Bank (ECB) secara langsung.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-          {/* Button 1: Fetch Latest Spot */}
-          <div className={`${isLight ? "bg-white border-indigo-100 shadow-sm" : "bg-slate-950/70 border-indigo-900/30"} border p-3.5 rounded-xl flex flex-col justify-between`}>
-            <div>
-              <div className={`text-xs font-semibold flex items-center gap-1.5 mb-1 ${isLight ? "text-slate-900" : "text-white"}`}>
-                <Zap className="w-3.5 h-3.5 text-amber-500" />
-                <span>Tarik Kurs Spot Hari Ini</span>
-              </div>
-              <p className={`text-[11px] mb-3 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
-                Mengambil nilai kurs transaksi penutupan terakhir USD/IDR dari endpoint <code className={`${isLight ? "text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded" : "text-indigo-300"} font-mono`}>/latest</code>.
-              </p>
-            </div>
-            <button
-              onClick={handleSyncLatestFrankfurter}
-              disabled={isSyncingLatest || isSyncingHistory}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition shadow-sm"
-            >
-              {isSyncingLatest ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Globe className="w-3.5 h-3.5" />
-              )}
-              <span>{isSyncingLatest ? "Mengambil Data..." : "Tarik Spot Terbaru"}</span>
-            </button>
-          </div>
-
-          {/* Button 2: Fetch Full History Series */}
-          <div className={`${isLight ? "bg-white border-indigo-100 shadow-sm" : "bg-slate-950/70 border-indigo-900/30"} border p-3.5 rounded-xl flex flex-col justify-between`}>
-            <div>
-              <div className={`text-xs font-semibold flex items-center gap-1.5 mb-1 ${isLight ? "text-slate-900" : "text-white"}`}>
-                <RefreshCw className={`w-3.5 h-3.5 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
-                <span>Sinkronkan Seluruh Deret Historis (2024 - Sekarang)</span>
-              </div>
-              <p className={`text-[11px] mb-3 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
-                Mengunduh seluruh runtun waktu time-series harian USD/IDR dari Frankfurter API dan memperbarui grafik serta metrik error.
-              </p>
-            </div>
-            <button
-              onClick={handleSyncHistoricalFrankfurter}
-              disabled={isSyncingLatest || isSyncingHistory}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition shadow-sm"
-            >
-              {isSyncingHistory ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Download className="w-3.5 h-3.5" />
-              )}
-              <span>{isSyncingHistory ? "Menyinkronkan Deret Waktu..." : "Tarik Data Historis Frankfurter"}</span>
-            </button>
-          </div>
-        </div>
-
-        {syncStatus && (
-          <div
-            className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${syncStatus.type === "success"
-              ? isLight
-                ? "bg-emerald-50 border-emerald-300 text-emerald-800"
-                : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
-              : isLight
-                ? "bg-rose-50 border-rose-300 text-rose-800"
-                : "bg-rose-950/70 border-rose-700/60 text-rose-300"
-              }`}
-          >
-            {syncStatus.type === "success" ? (
-              <CheckCircle2 className={`w-4 h-4 shrink-0 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
-            ) : (
-              <AlertCircle className={`w-4 h-4 shrink-0 ${isLight ? "text-rose-600" : "text-rose-400"}`} />
-            )}
-            <span>{syncStatus.message}</span>
-          </div>
-        )}
-      </div>
-
-      {/* 3. Quick Input Form for Actual Rate */}
-      <div className={`${isLight ? "bg-white border-slate-200" : "bg-slate-900/90 border-slate-800"} border rounded-2xl p-5 shadow-sm transition-colors`}>
-        <h3 className={`text-sm font-bold flex items-center gap-2 mb-2 ${isLight ? "text-slate-900" : "text-white"}`}>
-          <Plus className={`w-4 h-4 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
-          Input & Perbarui Kurs Aktual Hari Ini
-        </h3>
-        <p className={`text-xs mb-4 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
-          Masukkan kurs realisasi terbaru untuk menambahkan titik data baru ke dalam grafik historis dan menghitung ulang akurasi model secara instan.
-        </p>
-
-        <form onSubmit={handleSaveRate} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-          <div className="sm:col-span-4">
-            <label className={`text-[11px] font-semibold block mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
-              Tanggal Transaksi:
-            </label>
-            <input
-              type="date"
-              value={inputDate}
-              onChange={(e) => setInputDate(e.target.value)}
-              className={`w-full border rounded-lg px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-emerald-500 focus:outline-none ${isLight ? "bg-slate-50 border-slate-300 text-slate-900" : "bg-slate-950 border-slate-700 text-slate-200"
-                }`}
-              required
-            />
-          </div>
-
-          <div className="sm:col-span-5">
-            <label className={`text-[11px] font-semibold block mb-1 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
-              Nilai Kurs Aktual USD/IDR (Rp):
-            </label>
-            <div className="relative">
-              <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold ${isLight ? "text-slate-500" : "text-slate-400"}`}>
-                Rp
-              </span>
-              <input
-                type="number"
-                step="1"
-                placeholder="Contoh: 17844"
-                value={inputRate}
-                onChange={(e) => setInputRate(e.target.value)}
-                className={`w-full border rounded-lg pl-9 pr-3 py-2 font-mono text-xs font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none ${isLight ? "bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400" : "bg-slate-950 border-slate-700 text-white"
-                  }`}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="sm:col-span-3">
-            <button
-              type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-2 px-4 rounded-lg flex items-center justify-center gap-1.5 transition shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Simpan Kurs Aktual</span>
-            </button>
-          </div>
-        </form>
-
-        {saveSuccess && (
-          <div className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${isLight ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
-            }`}>
-            <CheckCircle2 className={`w-4 h-4 shrink-0 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
-            <span>{saveSuccess}</span>
-          </div>
-        )}
       </div>
 
       {/* 4. Statistical Summary of Actual Data */}

@@ -502,8 +502,8 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
         </div>
       </div>
 
-      {/* 2. Realtime Spot HUD Summary Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 mb-4">
+      {/* 2. Realtime Spot HUD Summary Grid (Clean 4-Card Institutional Treasury Layout) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-3">
         {/* Card 1: Spot Price with Live Flash */}
         <div
           className={`p-3 rounded-xl border transition-all duration-300 ${
@@ -515,7 +515,7 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
           }`}
         >
           <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-0.5">
-            <span>SPOT LIVE</span>
+            <span>KURS SPOT LIVE</span>
             <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-indigo-300 font-bold">
               {selectedCurrency}/IDR
             </span>
@@ -543,7 +543,7 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
         {/* Card 2: Bid & Ask Spread */}
         <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
           <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-0.5">
-            <span>BID / ASK</span>
+            <span>BID / ASK SPREAD</span>
             <span className="text-[9px] text-slate-500">{spreadBps} bps</span>
           </div>
           <div className="text-xs font-bold font-mono text-slate-200">
@@ -552,19 +552,19 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
             <span className="text-rose-400">{latestTick.ask}</span>
           </div>
           <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-            Spread: <strong className="text-slate-300">Rp {spreadValue}</strong>
+            Selisih: <strong className="text-slate-300">Rp {spreadValue}</strong>
           </div>
         </div>
 
         {/* Card 3: Session High & Low */}
         <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
           <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-0.5">
-            <span>RENTANG SESI</span>
+            <span>RENTANG HARGA HARIAN</span>
             <span className="text-[9px] text-slate-500">Intraday</span>
           </div>
           <div className="text-xs font-bold font-mono text-slate-200 flex items-center justify-between">
-            <span className="text-slate-400">L: <strong className="text-white">{sessionMin}</strong></span>
-            <span className="text-slate-400">H: <strong className="text-white">{sessionMax}</strong></span>
+            <span className="text-slate-400">Min: <strong className="text-white">{sessionMin}</strong></span>
+            <span className="text-slate-400">Maks: <strong className="text-white">{sessionMax}</strong></span>
           </div>
           {/* Visual Range bar */}
           <div className="w-full bg-slate-800 h-1 rounded-full mt-1.5 overflow-hidden">
@@ -585,88 +585,19 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Technical Signal Badge */}
-        <div className={`p-3 rounded-xl border ${liveSignal.bg}`}>
-          <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-0.5">
-            SINYAL INTRADAY
-          </div>
-          <div className={`text-xs font-bold font-mono ${liveSignal.color} truncate`}>
-            {liveSignal.text}
-          </div>
-          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-            EMA Crossover: <strong className="text-slate-300">Fast 9 / Slow 21</strong>
-          </div>
-        </div>
-
-        {/* Card 5: Market Jam & JISDOR Info (Hidden on very small screens) */}
-        <div className="hidden lg:block p-3 rounded-xl bg-slate-950/80 border border-slate-800">
+        {/* Card 4: Market Status & Fixing Schedule */}
+        <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
           <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-0.5">
-            <span>STATUS PASAR</span>
+            <span>STATUS PASAR VALAS</span>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
           <div className="text-xs font-bold text-slate-200 flex items-center gap-1 font-mono">
-            <span>SESI AKTIF (WIB)</span>
+            <span className="text-emerald-400">PERDAGANGAN AKTIF</span>
           </div>
           <div className="text-[10px] font-mono text-slate-400 mt-0.5 truncate">
-            Fixing JISDOR: 15:45 WIB
+            Fixing JISDOR: <strong className="text-slate-300">16:15 WIB</strong>
           </div>
         </div>
-      </div>
-
-      {/* 3. Indicators Toggle Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 bg-slate-950/70 p-2 rounded-xl border border-slate-800 text-xs">
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1 font-mono">
-            <SlidersHorizontal className="w-3 h-3 text-indigo-400" />
-            Layer Indikator:
-          </span>
-
-          <label className="flex items-center gap-1.5 cursor-pointer hover:text-white text-[11px] text-slate-300">
-            <input
-              type="checkbox"
-              checked={showVwap}
-              onChange={(e) => setShowVwap(e.target.checked)}
-              className="accent-amber-500 rounded cursor-pointer w-3 h-3"
-            />
-            <span className="text-amber-400 font-mono font-medium">VWAP</span>
-          </label>
-
-          <label className="flex items-center gap-1.5 cursor-pointer hover:text-white text-[11px] text-slate-300">
-            <input
-              type="checkbox"
-              checked={showBollinger}
-              onChange={(e) => setShowBollinger(e.target.checked)}
-              className="accent-purple-500 rounded cursor-pointer w-3 h-3"
-            />
-            <span className="text-purple-400 font-mono font-medium">Bollinger (20,2)</span>
-          </label>
-
-          <label className="flex items-center gap-1.5 cursor-pointer hover:text-white text-[11px] text-slate-300">
-            <input
-              type="checkbox"
-              checked={showEma}
-              onChange={(e) => setShowEma(e.target.checked)}
-              className="accent-cyan-500 rounded cursor-pointer w-3 h-3"
-            />
-            <span className="text-cyan-400 font-mono font-medium">EMA (9 & 21)</span>
-          </label>
-
-          <label className="flex items-center gap-1.5 cursor-pointer hover:text-white text-[11px] text-slate-300">
-            <input
-              type="checkbox"
-              checked={showHighLow}
-              onChange={(e) => setShowHighLow(e.target.checked)}
-              className="accent-indigo-500 rounded cursor-pointer w-3 h-3"
-            />
-            <span className="text-indigo-400 font-mono font-medium">High / Low Ref</span>
-          </label>
-        </div>
-
-        {lastLiveSyncTime && (
-          <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
-            Sinkronisasi API: {lastLiveSyncTime} WIB
-          </span>
-        )}
       </div>
 
       {/* 4. Main Realtime Canvas */}
@@ -708,70 +639,6 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
 
             <Tooltip content={<CustomLiveTooltip />} />
 
-            {/* Bollinger Band Upper & Lower Area */}
-            {showBollinger && (
-              <>
-                <Area
-                  type="monotone"
-                  dataKey="bbUpper"
-                  stroke="#a855f7"
-                  strokeWidth={1}
-                  strokeDasharray="2 2"
-                  fill="url(#bbBandGradient)"
-                  name="BB Upper"
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="bbLower"
-                  stroke="#a855f7"
-                  strokeWidth={1}
-                  strokeDasharray="2 2"
-                  dot={false}
-                  name="BB Lower"
-                  isAnimationActive={false}
-                />
-              </>
-            )}
-
-            {/* VWAP Line */}
-            {showVwap && (
-              <Line
-                type="monotone"
-                dataKey="vwap"
-                stroke="#fbbf24"
-                strokeWidth={1.8}
-                strokeDasharray="3 3"
-                dot={false}
-                name="VWAP Realtime"
-                isAnimationActive={false}
-              />
-            )}
-
-            {/* EMA 9 & EMA 21 */}
-            {showEma && (
-              <>
-                <Line
-                  type="monotone"
-                  dataKey="ema9"
-                  stroke="#06b6d4"
-                  strokeWidth={1.5}
-                  dot={false}
-                  name="EMA(9)"
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="ema21"
-                  stroke="#ec4899"
-                  strokeWidth={1.5}
-                  dot={false}
-                  name="EMA(21)"
-                  isAnimationActive={false}
-                />
-              </>
-            )}
-
             {/* Main Realtime Price Line & Area */}
             <Area
               type="monotone"
@@ -779,10 +646,10 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
               stroke="#10b981"
               strokeWidth={2.2}
               fill="url(#realtimeGradient)"
-              dot={false}
               activeDot={{ r: 6, fill: "#10b981", stroke: "#ffffff", strokeWidth: 2 }}
-              name="Kurs Realtime"
+              name={`Kurs ${selectedCurrency}/IDR`}
               isAnimationActive={false}
+              dot={false}
             />
 
             {/* Live Spot Current Reference Line */}

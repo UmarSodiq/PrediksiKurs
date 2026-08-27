@@ -144,9 +144,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
     message: string;
   } | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const [showApiModal, setShowApiModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [customFredKey, setCustomFredKey] = useState("");
 
   // Auto-Refresh Engine
   const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
@@ -279,7 +277,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
         inflasi: "User Verified",
         reserve: "Bank Indonesia (Rilis Resmi: $145.6 Miliar)",
       },
-      hasFredKey: Boolean(customFredKey),
+      hasFredKey: false,
       lastSyncTimestamp: new Date().toISOString(),
     };
 
@@ -297,7 +295,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
   const handleTriggerSync = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetchLatestMacroIndicators(customFredKey || undefined, true);
+      const res = await fetchLatestMacroIndicators(undefined, true);
       if (res.success && res.data) {
         setLiveIndicators(res.data);
         setLastSyncTime(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
@@ -438,18 +436,6 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
             </button>
 
             <button
-              onClick={() => setShowApiModal(true)}
-              className="py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
-              title="Pengaturan API Feed (FRED / BPS / EIA)"
-            >
-              <Key className="w-3.5 h-3.5 text-amber-400" />
-              <span>Kunci FRED</span>
-              {customFredKey && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              )}
-            </button>
-
-            <button
               onClick={handleTriggerSync}
               disabled={isSyncing}
               className="py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs flex items-center gap-2 transition shadow-lg shadow-indigo-600/30"
@@ -491,121 +477,6 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
           </div>
         )}
       </div>
-
-      {/* API Setup Modal */}
-      {showApiModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-xl p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
-                  <Key className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Integrasi API Feed Makroekonomi Eksternal
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Konfigurasikan kunci API resmi untuk pembaruan data otomatis langsung dari sumbernya.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowApiModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3.5 text-xs">
-              {/* Frankfurter Info */}
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-indigo-400" />
-                    Frankfurter API (Kurs USD/IDR Live)
-                  </span>
-                  <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">
-                    Aktif (Tanpa API Key)
-                  </span>
-                </div>
-                <p className="text-slate-400 text-[11px]">
-                  Menyediakan data kurs nilai tukar valuta asing resmi Bank Sentral Eropa (ECB) secara gratis dan real-time.
-                </p>
-              </div>
-
-              {/* FRED API Input */}
-              <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white flex items-center gap-1.5">
-                    <Landmark className="w-3.5 h-3.5 text-amber-400" />
-                    St. Louis Fed (FRED API)
-                  </span>
-                  <a
-                    href="https://fred.stlouisfed.org/docs/api/api_key.html"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5"
-                  >
-                    Dapatkan Kunci Gratis <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                </div>
-                <p className="text-slate-400 text-[11px]">
-                  Sumber resmi data Fed Funds Rate (`FEDFUNDS`), US Dollar Index (`DTWEXBGS`), Suku Bunga Kebijakan BI (`INTDSRIDM`), dan Cadangan Devisa.
-                </p>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                    FRED API Key (Opsional)
-                  </label>
-                  <input
-                    type="password"
-                    value={customFredKey}
-                    onChange={(e) => setCustomFredKey(e.target.value)}
-                    placeholder="Contoh: abc123def456..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* BPS & EIA Info */}
-              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white flex items-center gap-1.5">
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                    BPS & EIA Open Data Feeds
-                  </span>
-                  <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">
-                    Kalibrasi Otomatis
-                  </span>
-                </div>
-                <p className="text-slate-400 text-[11px]">
-                  Data inflasi IHK, neraca perdagangan bulanan, dan harga minyak mentah Brent disinkronkan secara konsisten melalui pipeline server.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                onClick={() => setShowApiModal(false)}
-                className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
-              >
-                Tutup
-              </button>
-              <button
-                onClick={() => {
-                  setShowApiModal(false);
-                  handleTriggerSync();
-                }}
-                className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Simpan & Uji Sinkronisasi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Manual / Verified Macro Value Customizer Modal */}
       {showEditModal && (

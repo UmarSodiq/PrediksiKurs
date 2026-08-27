@@ -1,10 +1,6 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   History,
-  Play,
-  Pause,
-  RotateCcw,
-  SkipForward,
   TrendingUp,
   TrendingDown,
   ShieldCheck,
@@ -65,55 +61,15 @@ export const BacktestReplayView: React.FC<BacktestReplayViewProps> = ({
   const [selectedModel, setSelectedModel] = useState<ModelType>("ensemble");
   const [cutoffDate, setCutoffDate] = useState<string>(defaultCutoff);
   const [testHorizon, setTestHorizon] = useState<number>(60);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [playbackIndex, setPlaybackIndex] = useState<number | null>(null);
-  const [playSpeedMs, setPlaySpeedMs] = useState<number>(300);
 
   // Re-run backtest simulation whenever parameters change
   const backtestResult: BacktestResult = useMemo(() => {
     return runBacktestSimulation(data, cutoffDate, testHorizon, selectedModel);
   }, [data, cutoffDate, testHorizon, selectedModel]);
 
-  // Handle Playback Animation
-  useEffect(() => {
-    let timer: any;
-    if (isPlaying) {
-      timer = setInterval(() => {
-        setPlaybackIndex((prev) => {
-          const next = (prev === null ? 0 : prev) + 1;
-          if (next >= backtestResult.points.length) {
-            setIsPlaying(false);
-            return backtestResult.points.length - 1;
-          }
-          return next;
-        });
-      }, playSpeedMs);
-    }
-    return () => clearInterval(timer);
-  }, [isPlaying, backtestResult.points.length, playSpeedMs]);
-
-  // Handle Reset Playback
-  const handleResetReplay = () => {
-    setIsPlaying(false);
-    setPlaybackIndex(null);
-  };
-
-  const handleStepForward = () => {
-    setPlaybackIndex((prev) => {
-      const cur = prev === null ? 0 : prev;
-      return Math.min(cur + 1, backtestResult.points.length - 1);
-    });
-  };
-
   // Prepare chart dataset for rendering
   const chartData = useMemo(() => {
-    const pointsToShow =
-      playbackIndex === null
-        ? backtestResult.points
-        : backtestResult.points.slice(0, playbackIndex + 1);
-
-    const activePointMap = new Map<string, typeof backtestResult.points[0]>();
-    pointsToShow.forEach((p) => activePointMap.set(p.date, p));
+    const pointsToShow = backtestResult.points;
 
     // Combine in-sample history and out-of-sample test
     const combined: any[] = [];
@@ -155,7 +111,7 @@ export const BacktestReplayView: React.FC<BacktestReplayViewProps> = ({
     });
 
     return combined;
-  }, [backtestResult, playbackIndex]);
+  }, [backtestResult]);
 
   // Export Backtest Log CSV
   const handleExportCsv = () => {
@@ -231,7 +187,6 @@ export const BacktestReplayView: React.FC<BacktestReplayViewProps> = ({
               value={selectedModel}
               onChange={(e) => {
                 setSelectedModel(e.target.value as ModelType);
-                handleResetReplay();
               }}
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
             >
@@ -255,7 +210,6 @@ export const BacktestReplayView: React.FC<BacktestReplayViewProps> = ({
               max={actualDates[actualDates.length - 10] || "2026-08-01"}
               onChange={(e) => {
                 setCutoffDate(e.target.value);
-                handleResetReplay();
               }}
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
             />
@@ -270,7 +224,6 @@ export const BacktestReplayView: React.FC<BacktestReplayViewProps> = ({
               value={testHorizon}
               onChange={(e) => {
                 setTestHorizon(Number(e.target.value));
-                handleResetReplay();
               }}
               className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
             >
@@ -282,42 +235,19 @@ export const BacktestReplayView: React.FC<BacktestReplayViewProps> = ({
             </select>
           </div>
 
-          {/* 4. Playback Controls */}
+          {/* 4. Audit Download */}
           <div>
             <label className="text-[11px] font-semibold text-slate-400 block mb-1">
-              Kontrol Pemutaran Replay
+              Aksi Laporan Audit
             </label>
-            <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setIsPlaying(!isPlaying)}
-                className={`flex-1 py-1 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
-                  isPlaying
-                    ? "bg-amber-600 text-white"
-                    : "bg-indigo-600 hover:bg-indigo-500 text-white"
-                }`}
+                onClick={handleExportCsv}
+                className="w-full py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-md"
               >
-                {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                <span>{isPlaying ? "Jeda" : "Putar"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleStepForward}
-                disabled={isPlaying}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 disabled:opacity-50 transition"
-                title="Langkah 1 Hari ke Depan"
-              >
-                <SkipForward className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={handleResetReplay}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 transition"
-                title="Kembalikan Tampilan Penuh"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh Audit CSV</span>
               </button>
             </div>
           </div>
@@ -335,7 +265,6 @@ export const BacktestReplayView: React.FC<BacktestReplayViewProps> = ({
               type="button"
               onClick={() => {
                 setCutoffDate(preset.date);
-                handleResetReplay();
               }}
               className={`text-[10px] px-2.5 py-1 rounded-lg font-medium transition border ${
                 cutoffDate === preset.date
