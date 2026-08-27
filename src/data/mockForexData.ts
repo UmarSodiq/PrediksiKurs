@@ -17,7 +17,7 @@ export const currencyProfiles: CurrencyProfile[] = [
     name: "US Dollar (Dolar AS)",
     symbol: "$",
     flag: "🇺🇸",
-    baseRate: 17705,
+    baseRate: 17784,
     spreadMargin: 120,
     description: "Mata uang cadangan devisa utama dunia dan transaksi energi global.",
     peruriContext: "Krusial untuk impor bahan kimia sekuriti, tinta khusus intaglio, dan transaksi komoditas global.",
@@ -78,12 +78,12 @@ export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date
   const ratio = currency === "USD"
     ? 1.0
     : currency === "EUR"
-    ? 19340 / 17705
+    ? 19340 / 17784
     : currency === "JPY"
-    ? 118.5 / 17705
+    ? 118.5 / 17784
     : currency === "SGD"
-    ? 13520 / 17705
-    : 2475 / 17705;
+    ? 13520 / 17784
+    : 2475 / 17784;
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -119,7 +119,7 @@ export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date
     const startDateStr = "2026-05-01";
     const totalBridgeDays = 113; // 2026-05-01 through 2026-08-21
     const startRate = 17380;
-    const targetSpot = 17705;
+    const targetSpot = 17784;
 
     for (let k = 0; k < totalBridgeDays; k++) {
       const dStr = addDaysToIsoDate(startDateStr, k);
@@ -246,7 +246,7 @@ export function generateDatasetForModel(
 
   // Generate 2 Years (730 calendar days) of future horizon out-of-sample forecast
   const lastHist = result[result.length - 1];
-  const lastSpot = lastHist ? lastHist.actual || 17705 : 17705;
+  const lastSpot = lastHist ? lastHist.actual || 17784 : 17784;
   const lastDateStr = lastHist ? lastHist.date : "2026-08-21";
   const futureDays = 730; // 2 Full Calendar Years of daily projections (365 days * 2)
 
@@ -262,7 +262,7 @@ export function generateDatasetForModel(
     let forecastVal = lastSpot;
     let futureStdErr = 30;
 
-    const scaleRatio = lastSpot / 17705;
+    const scaleRatio = lastSpot / 17784;
     const isJpy = currency === "JPY";
 
     switch (modelType) {

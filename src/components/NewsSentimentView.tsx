@@ -45,7 +45,7 @@ interface NewsSentimentViewProps {
 }
 
 export const NewsSentimentView: React.FC<NewsSentimentViewProps> = ({
-  currentSpot = 17705,
+  currentSpot = 17784,
 }) => {
   const [newsList, setNewsList] = useState<NewsSentimentItem[]>(mockNewsSentimentList);
   const [searchQuery, setSearchQuery] = useState("");

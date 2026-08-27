@@ -38,7 +38,7 @@ export const RateLookupPanel: React.FC<RateLookupPanelProps> = ({ data, selected
 
     // 2. Dynamic continuous projection for dates beyond or outside dataset
     const baseDate = latestHist ? latestHist.date : "2026-08-21";
-    const baseSpot = latestHist?.actual || 17705;
+    const baseSpot = latestHist?.actual || 17784;
 
     const baseMs = new Date(baseDate).getTime();
     const searchMs = new Date(searchDate).getTime();

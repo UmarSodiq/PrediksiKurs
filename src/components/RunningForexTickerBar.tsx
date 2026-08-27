@@ -22,7 +22,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "USD/IDR",
     name: "Dolar AS",
     flag: "🇺🇸",
-    rate: 17705,
+    rate: 17784,
     changePct: 0.12,
   },
   {
@@ -112,7 +112,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
 ];
 
 export const RunningForexTickerBar: React.FC<RunningForexTickerBarProps> = ({
-  usdIdrSpot = 17705,
+  usdIdrSpot = 17784,
 }) => {
   const [tickerItems, setTickerItems] = useState<TickerItem[]>(INITIAL_TICKER_ITEMS);
 
@@ -122,8 +122,8 @@ export const RunningForexTickerBar: React.FC<RunningForexTickerBarProps> = ({
       setTickerItems((prev) =>
         prev.map((item) => {
           if (item.id === "USD") {
-            const diff = usdIdrSpot - 17700;
-            const diffPct = Number(((diff / 17700) * 100).toFixed(2));
+            const diff = usdIdrSpot - 17750;
+            const diffPct = Number(((diff / 17750) * 100).toFixed(2));
             return {
               ...item,
               rate: usdIdrSpot,

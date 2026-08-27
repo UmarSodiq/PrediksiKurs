@@ -194,7 +194,7 @@ export const mockSentimentTrendHistory = [
   { date: "2026-08-14", sentimentIndex: 61, usdIdr: 17750, tone: "Positif" },
   { date: "2026-08-18", sentimentIndex: 67, usdIdr: 17720, tone: "Sangat Positif" },
   { date: "2026-08-22", sentimentIndex: 63, usdIdr: 17710, tone: "Positif" },
-  { date: "2026-08-27", sentimentIndex: 71, usdIdr: 17705, tone: "Sangat Bullish IDR" },
+  { date: "2026-08-27", sentimentIndex: 71, usdIdr: 17784, tone: "Sangat Bullish IDR" },
 ];
 
 export function computeSentimentMetrics(newsList: NewsSentimentItem[] = mockNewsSentimentList): SentimentMetricsSummary {

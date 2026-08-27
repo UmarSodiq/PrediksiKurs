@@ -167,7 +167,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
     inflasi: string;
     reserve: string;
   }>({
-    usdIdr: "17705",
+    usdIdr: "17784",
     biRate: "5.75",
     fedFunds: "3.63",
     dxy: "118.90",
@@ -260,7 +260,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
     const reserveInMillions = parsedReserve < 1000 ? parsedReserve * 1000 : parsedReserve;
 
     const newObj: MacroSyncResult = {
-      usdIdr: parseFloat(editValues.usdIdr) || 17705,
+      usdIdr: parseFloat(editValues.usdIdr) || 17784,
       usdIdrDate: new Date().toISOString().split("T")[0],
       biRate: parseFloat(editValues.biRate) || 5.75,
       fedFunds: parseFloat(editValues.fedFunds) || 3.63,

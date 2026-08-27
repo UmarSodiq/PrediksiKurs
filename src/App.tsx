@@ -91,7 +91,7 @@ function DashboardContent() {
     const lastFuture = future[future.length - 1] || lastHist;
 
     const currProfile = currencyProfiles.find((c) => c.code === selectedCurrency);
-    const fallbackSpot = currProfile ? currProfile.baseRate : 17705;
+    const fallbackSpot = currProfile ? currProfile.baseRate : 17784;
 
     return {
       currentSpot: lastHist?.actual || fallbackSpot,

@@ -74,7 +74,7 @@ export async function fetchLatestMacroIndicators(
   // 2. Client-Side Multi-Source Fallback Engine (Runs even if backend is 404/offline)
   try {
     const spotResult = await fetchLatestFrankfurterRate();
-    const usdIdrRate = spotResult.rate || 17705;
+    const usdIdrRate = spotResult.rate || 17784;
     const usdIdrDate = spotResult.date || new Date().toISOString().split("T")[0];
 
     const sourceLabel = spotResult.source === "jisdor_bi_consensus"
