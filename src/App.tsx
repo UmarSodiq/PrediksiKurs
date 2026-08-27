@@ -14,6 +14,7 @@ import { ResidualAnalysisView } from "./components/ResidualAnalysisView";
 import { MacroDriversView } from "./components/MacroDriversView";
 import { ScenarioSimulator } from "./components/ScenarioSimulator";
 import { BacktestReplayView } from "./components/BacktestReplayView";
+import { NewsSentimentView } from "./components/NewsSentimentView";
 import { AiAnalystPanel } from "./components/AiAnalystPanel";
 import { RateLookupPanel } from "./components/RateLookupPanel";
 import { RunningForexTickerBar } from "./components/RunningForexTickerBar";
@@ -442,7 +443,12 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* TAB 4: BACKTESTING & TIME-TRAVEL REPLAY */}
+            {/* TAB 4: ANALISIS SENTIMEN BERITA */}
+            {activeTab === "sentiment" && (
+              <NewsSentimentView currentSpot={currentSpot} />
+            )}
+
+            {/* TAB 5: BACKTESTING & TIME-TRAVEL REPLAY */}
             {activeTab === "backtest" && (
               <BacktestReplayView
                 data={data}

@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   BarChart2,
   Globe,
+  Newspaper,
   History,
   X,
   Database,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 
-export type MainTabType = "overview" | "analysis" | "macro-sim" | "backtest";
+export type MainTabType = "overview" | "analysis" | "macro-sim" | "sentiment" | "backtest";
 
 interface SidebarProps {
   activeTab: MainTabType;
@@ -56,6 +57,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "Makro & Simulasi", 
       subLabel: "Drivers & Skenario What-If",
       icon: Globe 
+    },
+    { 
+      id: "sentiment", 
+      label: "Sentimen Berita", 
+      subLabel: "Analisis Berita & Dampak IDR",
+      icon: Newspaper 
     },
     { 
       id: "backtest", 
