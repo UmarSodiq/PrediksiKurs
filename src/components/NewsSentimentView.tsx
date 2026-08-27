@@ -180,6 +180,7 @@ export const NewsSentimentView: React.FC<NewsSentimentViewProps> = ({
       mechanismExplanation: `Evaluasi NLP Otomatis: Skor Polaritas ${customAnalysisResult.score > 0 ? "+" : ""}${customAnalysisResult.score}`,
       tags: ["#AnalisisKustom", "#UserFeed", "#RealtimeAI"],
       confidenceScore: 90,
+      url: `https://news.google.com/search?q=${encodeURIComponent(customHeadline)}&hl=id&gl=ID&ceid=ID:id`,
     };
 
     setNewsList([newItem, ...newsList]);

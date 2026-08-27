@@ -117,17 +117,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium transition-all group flex items-center justify-between ${
                   isActive
-                    ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-l-2 border-indigo-600 dark:border-indigo-500 font-semibold shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200 border-l-2 border-transparent"
+                    ? "bg-blue-50 dark:bg-blue-950/50 text-blue-900 dark:text-blue-200 border-l-3 border-blue-800 dark:border-blue-500 font-bold shadow-2xs"
+                    : "text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200 border-l-3 border-transparent"
                 }`}
               >
                 <div className="flex items-center gap-2.5 truncate">
                   <Icon className={`w-4 h-4 shrink-0 transition-colors ${
-                    isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                    isActive ? "text-blue-800 dark:text-blue-400" : "text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300"
                   }`} />
                   <div className="truncate text-left">
                     <span className="block truncate text-xs">{tab.label}</span>
-                    <span className="block text-[10px] text-slate-400 dark:text-slate-500 truncate font-normal">{tab.subLabel}</span>
+                    <span className="block text-[10px] text-slate-500 dark:text-slate-500 truncate font-normal">{tab.subLabel}</span>
                   </div>
                 </div>
               </button>
