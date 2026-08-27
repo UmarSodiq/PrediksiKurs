@@ -487,6 +487,52 @@ export const NewsSentimentView: React.FC<NewsSentimentViewProps> = ({
 
       {/* 4. Search, Filter & News Feed List */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        {/* Live News Direct Portals Bar */}
+        <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2 text-xs font-semibold text-white">
+            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
+            <span>Portal Berita Keuangan & Makro Live:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <a
+              href="https://news.google.com/search?q=kurs+rupiah+hari+ini&hl=id&gl=ID&ceid=ID:id"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/40 font-semibold flex items-center gap-1 transition"
+            >
+              <span>🌐 Google News (Rupiah Hari Ini)</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            <a
+              href="https://www.cnbcindonesia.com/tag/rupiah"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium flex items-center gap-1 transition"
+            >
+              <span>📈 CNBC Indonesia</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            <a
+              href="https://www.bi.go.id/id/publikasi/ruang-media/news-release/Default.aspx"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium flex items-center gap-1 transition"
+            >
+              <span>🏛️ Bank Indonesia Press</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            <a
+              href="https://www.bps.go.id/id/pressrelease"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium flex items-center gap-1 transition"
+            >
+              <span>📊 BPS Siaran Pers</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          </div>
+        </div>
+
         {/* Controls: Search & Category Pills */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search Box */}
@@ -692,12 +738,17 @@ export const NewsSentimentView: React.FC<NewsSentimentViewProps> = ({
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           {item.tags.map((tag) => (
-                            <span
+                            <a
                               key={tag}
-                              className="px-2 py-0.5 rounded-md bg-slate-900 text-indigo-300/90 border border-slate-800 text-[10px] font-mono"
+                              href={`https://news.google.com/search?q=${encodeURIComponent(tag.replace("#", "") + " Rupiah terbaru")}&hl=id&gl=ID&ceid=ID:id`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Cari berita terbaru untuk topik ${tag}`}
+                              className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-indigo-200 border border-slate-800 hover:border-indigo-500/40 text-[10px] font-mono transition flex items-center gap-1"
                             >
-                              {tag}
-                            </span>
+                              <span>{tag}</span>
+                              <ExternalLink className="w-2 h-2 opacity-60" />
+                            </a>
                           ))}
                         </div>
 
