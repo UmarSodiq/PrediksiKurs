@@ -835,22 +835,32 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
         </ResponsiveContainer>
       </div>
 
-      {/* 5. Live Footer Status */}
-      <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-slate-400 gap-2">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 font-mono text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-            <span>Real-time Interbank Feed Active</span>
+      {/* 5. Live Footer Status & Data Sources */}
+      <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center md:justify-between text-xs text-slate-400 gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="flex items-center gap-1.5 font-mono text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Feed Live Interbank Aktif</span>
           </span>
-          <span className="hidden md:inline text-slate-600">•</span>
-          <span className="text-[11px] text-slate-400 hidden md:inline">
-            Bank Indonesia Spot & Domestic Non-Deliverable Forward (DNDF) Mirror
+          <span className="text-slate-500 hidden sm:inline">•</span>
+          <span className="text-slate-300 font-medium flex flex-wrap items-center gap-1">
+            <span className="text-slate-400 font-normal">Sumber Data:</span>
+            <span className="font-semibold text-indigo-300">Open Exchange Rates API</span>
+            <span className="text-slate-500">/</span>
+            <span className="font-semibold text-emerald-300">Bank Indonesia (JISDOR)</span>
+            <span className="text-slate-500">/</span>
+            <span className="font-semibold text-amber-300">Frankfurter (ECB Feed)</span>
           </span>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[10px] text-slate-400">
-          <span>Tick Rate: {ticks.length} pts buffered</span>
+
+        <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] text-slate-400 self-start md:self-auto">
+          <span className="bg-slate-800/80 px-2 py-0.5 rounded text-slate-300 border border-slate-700/60">
+            Tick Rate: {ticks.length} pts buffered
+          </span>
           <span>•</span>
-          <span>99% Execution Latency &lt; 50ms</span>
+          <span className="text-emerald-400/90 font-semibold">
+            99% Execution Latency &lt; 50ms
+          </span>
         </div>
       </div>
     </div>
