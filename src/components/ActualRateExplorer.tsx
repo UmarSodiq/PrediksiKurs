@@ -1,27 +1,20 @@
 import React, { useState, useMemo } from "react";
 import {
-  TrendingUp,
-  TrendingDown,
   Calendar,
-  DollarSign,
   Landmark,
   Plus,
   Search,
   Download,
   CheckCircle2,
   AlertCircle,
-  FileSpreadsheet,
   ArrowUpRight,
   ArrowDownRight,
-  Filter,
   BarChart3,
-  Scale,
   Globe,
   RefreshCw,
   Zap,
 } from "lucide-react";
 import { ForexDataPoint } from "../types";
-import { enrichWithMovingAverages } from "../utils/metricsCalculator";
 import { useTheme } from "../context/ThemeContext";
 import {
   fetchLatestFrankfurterRate,
@@ -151,7 +144,7 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
 
     // Rows
     filteredRecords.slice().reverse().forEach(row => {
-      csvContent += `${row.date},${row.actual || ""},${row.dailyChange || ""},${row.dailyChangePct || ""},${row.ma20 || ""},${row.ma50 || ""},${row.dxyIndex || ""}\n`;
+      csvContent += `${row.date},${row.actual || ""},${row.dailyChange || ""},${row.dailyChangePct || ""},${row.ma20 || ""},${row.ma50 || ""},${row.dxy || ""}\n`;
     });
 
     // Create Blob and Download

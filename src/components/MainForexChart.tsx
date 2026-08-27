@@ -14,13 +14,10 @@ import {
 } from "recharts";
 import {
   Calendar,
-  Eye,
   TrendingUp,
   Maximize2,
   Minimize2,
-  HelpCircle,
   Clock,
-  Layers,
 } from "lucide-react";
 import { ForexDataPoint, ModelProfile } from "../types";
 import { useTheme } from "../context/ThemeContext";
@@ -158,7 +155,7 @@ export const MainForexChart: React.FC<MainForexChartProps> = ({
   const todayDate = filteredData[todayIndex]?.date;
 
   // Custom Tooltip component
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || !payload.length) return null;
     const currentPoint = payload[0]?.payload as ForexDataPoint;
     if (!currentPoint) return null;

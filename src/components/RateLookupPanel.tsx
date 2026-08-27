@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Search, Calendar, Target, Activity, ArrowRight, Sparkles, Shield, Clock } from "lucide-react";
+import { Search, Calendar, Target, Activity, ArrowRight, Shield, Clock } from "lucide-react";
 import { ForexDataPoint } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { addDaysToIsoDate } from "../data/mockForexData";

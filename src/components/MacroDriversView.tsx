@@ -1,20 +1,13 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Globe,
-  TrendingUp,
-  TrendingDown,
   DollarSign,
   Landmark,
-  Flame,
-  Calendar,
   Layers,
   ArrowUpRight,
-  ArrowDownRight,
-  ShieldCheck,
   Download,
   Copy,
   Check,
-  Filter,
   BarChart2,
   FileSpreadsheet,
   Info,
@@ -658,7 +651,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
                   />
                   <span className="text-slate-400 text-[10px] whitespace-nowrap">Miliar</span>
                 </div>
-                <p className="text-[10px] text-slate-400">Posisi Resmi BI Juni: ~145,6 Miliar USD</p>
+                <p className="text-[10px] text-slate-400">Posisi Resmi BI: ~145,6 Miliar USD</p>
               </div>
 
               {/* BI-Rate */}
@@ -926,7 +919,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
           <div className="text-xl font-bold text-white font-mono">
             {formatReserveDisplay(currentReadings.reserve)}
           </div>
-          <div className="text-[11px] text-slate-400">{currentReadings.sources.reserve || "Bank Indonesia (Rilis Juni: $145.6 Miliar)"}</div>
+          <div className="text-[11px] text-slate-400">{currentReadings.sources.reserve || "Bank Indonesia (Rilis: $145.6 Miliar)"}</div>
         </div>
       </div>
 

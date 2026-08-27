@@ -1,14 +1,8 @@
 import React, { useState, useMemo } from "react";
 import {
   Sliders,
-  Play,
   RotateCcw,
-  Sparkles,
   TrendingUp,
-  TrendingDown,
-  AlertCircle,
-  HelpCircle,
-  Zap,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -19,7 +13,6 @@ import {
   Tooltip,
   Legend,
   CartesianGrid,
-  ReferenceLine,
 } from "recharts";
 import { ForexDataPoint, ScenarioParameters } from "../types";
 import { useTheme } from "../context/ThemeContext";
@@ -156,14 +149,6 @@ export const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
     simulationChartData.filter((d) => d.isFuture).pop() || endSimulatedPoint;
   const netDeviation =
     (endSimulatedPoint?.simulatedForecast || 0) - (endBasePoint?.baseForecast || 0);
-
-  const horizonLabelMap: Record<string, string> = {
-    "30d": "30 Hari",
-    "90d": "90 Hari (1 Kuartal)",
-    "180d": "180 Hari (6 Bulan)",
-    "1y": "1 Tahun (252 Hari)",
-    "2y": "2 Tahun (504 Hari)",
-  };
 
   return (
     <div id="scenario-simulator-view" className="space-y-6">
