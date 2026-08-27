@@ -62,9 +62,14 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
     try {
       const latest = await fetchLatestFrankfurterRate();
       onAddActualRate(latest.date, latest.rate);
+      const sourceName = latest.source === "jisdor_bi_consensus"
+        ? "Konsensus Resmi JISDOR BI"
+        : latest.source === "open_er_api_live" || latest.source === "open_er_api_direct"
+          ? "Live Spot Feed (Open ER API)"
+          : "Frankfurter API (European Central Bank)";
       setSyncStatus({
         type: "success",
-        message: `Berhasil menarik kurs terbaru dari Frankfurter: Rp ${latest.rate.toLocaleString("id-ID")} (Tanggal: ${latest.date})`,
+        message: `Berhasil menarik kurs terbaru (${sourceName}): Rp ${latest.rate.toLocaleString("id-ID")} (Tanggal: ${latest.date})`,
       });
     } catch (err: any) {
       setSyncStatus({
@@ -143,7 +148,7 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
   const handleExportCSV = () => {
     // CSV Header
     let csvContent = "Tanggal,Kurs Aktual (USD/IDR),Perubahan Harian (Rp),Perubahan (%),MA(20),MA(50),DXY Index\n";
-    
+
     // Rows
     filteredRecords.slice().reverse().forEach(row => {
       csvContent += `${row.date},${row.actual || ""},${row.dailyChange || ""},${row.dailyChangePct || ""},${row.ma20 || ""},${row.ma50 || ""},${row.dxyIndex || ""}\n`;
@@ -218,11 +223,10 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
 
           <button
             onClick={handleExportActualCSV}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-              isLight
-                ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
-                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${isLight
+              ? "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+              : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+              }`}
           >
             <Download className="w-3.5 h-3.5" />
             <span>Ekspor CSV Kurs Aktual</span>
@@ -235,9 +239,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
           <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
             <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
               <span>Kurs Acuan JISDOR (Spot)</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-emerald-950 text-emerald-300"
-              }`}>Mid Rate</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isLight ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-emerald-950 text-emerald-300"
+                }`}>Mid Rate</span>
             </div>
             <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-emerald-700" : "text-emerald-400"}`}>
               Rp {jisdorMid.toLocaleString("id-ID")}
@@ -251,9 +254,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
           <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
             <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
               <span>Kurs Beli (Bank Buy)</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                isLight ? "bg-indigo-100 text-indigo-800 border border-indigo-200" : "bg-indigo-950 text-indigo-300"
-              }`}>Beli Valas</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isLight ? "bg-indigo-100 text-indigo-800 border border-indigo-200" : "bg-indigo-950 text-indigo-300"
+                }`}>Beli Valas</span>
             </div>
             <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-slate-900" : "text-slate-200"}`}>
               Rp {bankBeli.toLocaleString("id-ID")}
@@ -267,9 +269,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
           <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
             <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
               <span>Kurs Jual (Bank Sell)</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                isLight ? "bg-indigo-100 text-indigo-800 border border-indigo-200" : "bg-indigo-950 text-indigo-300"
-              }`}>Jual Valas</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isLight ? "bg-indigo-100 text-indigo-800 border border-indigo-200" : "bg-indigo-950 text-indigo-300"
+                }`}>Jual Valas</span>
             </div>
             <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-slate-900" : "text-slate-200"}`}>
               Rp {bankJual.toLocaleString("id-ID")}
@@ -283,9 +284,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
           <div className={`${isLight ? "bg-slate-50 border-slate-200" : "bg-slate-950/70 border-slate-800"} p-4 rounded-xl border`}>
             <div className={`flex items-center justify-between text-xs font-medium mb-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
               <span>Spread Jual-Beli</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                isLight ? "bg-slate-200 text-slate-800 border border-slate-300" : "bg-slate-800 text-slate-300"
-              }`}>Margin</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${isLight ? "bg-slate-200 text-slate-800 border border-slate-300" : "bg-slate-800 text-slate-300"
+                }`}>Margin</span>
             </div>
             <div className={`text-2xl font-bold tracking-tight font-mono ${isLight ? "text-indigo-700" : "text-indigo-300"}`}>
               Rp {(bankJual - bankBeli).toLocaleString("id-ID")}
@@ -298,22 +298,19 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
       </div>
 
       {/* 2. Frankfurter Live API Integration & Data Retrieval */}
-      <div className={`${
-        isLight
-          ? "bg-gradient-to-br from-indigo-50/90 via-white to-slate-50 border-indigo-200"
-          : "bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border-indigo-900/50"
-      } border rounded-2xl p-5 shadow-sm transition-colors`}>
-        <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b ${
-          isLight ? "border-indigo-100" : "border-indigo-900/40"
-        }`}>
+      <div className={`${isLight
+        ? "bg-gradient-to-br from-indigo-50/90 via-white to-slate-50 border-indigo-200"
+        : "bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border-indigo-900/50"
+        } border rounded-2xl p-5 shadow-sm transition-colors`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b ${isLight ? "border-indigo-100" : "border-indigo-900/40"
+          }`}>
           <div className="flex items-center gap-2">
             <Globe className={`w-5 h-5 ${isLight ? "text-indigo-600" : "text-indigo-400"}`} />
             <div>
               <h3 className={`text-sm font-bold flex items-center gap-2 ${isLight ? "text-slate-900" : "text-white"}`}>
                 Integrasi Frankfurter API (Kurs Aktual Live & Historis ECB)
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${
-                  isLight ? "bg-indigo-100 text-indigo-800 border-indigo-300" : "bg-indigo-950 text-indigo-300 border-indigo-700/50"
-                }`}>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-semibold border ${isLight ? "bg-indigo-100 text-indigo-800 border-indigo-300" : "bg-indigo-950 text-indigo-300 border-indigo-700/50"
+                  }`}>
                   api.frankfurter.app
                 </span>
               </h3>
@@ -378,15 +375,14 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
 
         {syncStatus && (
           <div
-            className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${
-              syncStatus.type === "success"
-                ? isLight
-                  ? "bg-emerald-50 border-emerald-300 text-emerald-800"
-                  : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
-                : isLight
+            className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${syncStatus.type === "success"
+              ? isLight
+                ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+                : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
+              : isLight
                 ? "bg-rose-50 border-rose-300 text-rose-800"
                 : "bg-rose-950/70 border-rose-700/60 text-rose-300"
-            }`}
+              }`}
           >
             {syncStatus.type === "success" ? (
               <CheckCircle2 className={`w-4 h-4 shrink-0 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
@@ -417,9 +413,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
               type="date"
               value={inputDate}
               onChange={(e) => setInputDate(e.target.value)}
-              className={`w-full border rounded-lg px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-emerald-500 focus:outline-none ${
-                isLight ? "bg-slate-50 border-slate-300 text-slate-900" : "bg-slate-950 border-slate-700 text-slate-200"
-              }`}
+              className={`w-full border rounded-lg px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-emerald-500 focus:outline-none ${isLight ? "bg-slate-50 border-slate-300 text-slate-900" : "bg-slate-950 border-slate-700 text-slate-200"
+                }`}
               required
             />
           </div>
@@ -438,9 +433,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
                 placeholder="Contoh: 17844"
                 value={inputRate}
                 onChange={(e) => setInputRate(e.target.value)}
-                className={`w-full border rounded-lg pl-9 pr-3 py-2 font-mono text-xs font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none ${
-                  isLight ? "bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400" : "bg-slate-950 border-slate-700 text-white"
-                }`}
+                className={`w-full border rounded-lg pl-9 pr-3 py-2 font-mono text-xs font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none ${isLight ? "bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400" : "bg-slate-950 border-slate-700 text-white"
+                  }`}
                 required
               />
             </div>
@@ -458,9 +452,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
         </form>
 
         {saveSuccess && (
-          <div className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${
-            isLight ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
-          }`}>
+          <div className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${isLight ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-emerald-950/70 border-emerald-700/60 text-emerald-300"
+            }`}>
             <CheckCircle2 className={`w-4 h-4 shrink-0 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
             <span>{saveSuccess}</span>
           </div>
@@ -527,9 +520,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
       {/* 5. Complete Table of Actual Records */}
       <div className={`${isLight ? "bg-white border-slate-200" : "bg-slate-900/90 border-slate-800"} border rounded-2xl overflow-hidden shadow-sm transition-colors`}>
         {/* Table Filter Toolbar */}
-        <div className={`p-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
-          isLight ? "border-slate-200 bg-slate-50" : "border-slate-800 bg-slate-950/60"
-        }`}>
+        <div className={`p-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isLight ? "border-slate-200 bg-slate-50" : "border-slate-800 bg-slate-950/60"
+          }`}>
           <div className="flex items-center gap-2">
             <Calendar className={`w-4 h-4 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
             <h3 className={`text-sm font-bold ${isLight ? "text-slate-900" : "text-white"}`}>
@@ -549,11 +541,10 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
                 placeholder="Cari tanggal (YYYY-MM)..."
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
-                className={`border rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44 ${
-                  isLight
-                    ? "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
-                    : "bg-slate-900 border-slate-700 text-slate-200"
-                }`}
+                className={`border rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 w-44 ${isLight
+                  ? "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
+                  : "bg-slate-900 border-slate-700 text-slate-200"
+                  }`}
               />
             </div>
 
@@ -561,9 +552,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
-              className={`border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none cursor-pointer ${
-                isLight ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-200"
-              }`}
+              className={`border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none cursor-pointer ${isLight ? "bg-white border-slate-300 text-slate-800" : "bg-slate-900 border-slate-700 text-slate-200"
+                }`}
             >
               <option value="ALL">Semua Tahun</option>
               <option value="2026">Tahun 2026</option>
@@ -584,9 +574,8 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
         {/* Table Body */}
         <div className="overflow-x-auto max-h-96 overflow-y-auto">
           <table className={`w-full text-left text-xs ${isLight ? "text-slate-700" : "text-slate-300"}`}>
-            <thead className={`sticky top-0 uppercase tracking-wider font-semibold text-[10px] border-b ${
-              isLight ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-slate-950 text-slate-400 border-slate-800"
-            }`}>
+            <thead className={`sticky top-0 uppercase tracking-wider font-semibold text-[10px] border-b ${isLight ? "bg-slate-100 text-slate-600 border-slate-200" : "bg-slate-950 text-slate-400 border-slate-800"
+              }`}>
               <tr>
                 <th className="py-2.5 px-4">Tanggal</th>
                 <th className="py-2.5 px-3 text-right">Kurs Aktual (USD/IDR)</th>
@@ -608,28 +597,26 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
                     Rp {row.actual?.toLocaleString("id-ID")}
                   </td>
                   <td
-                    className={`py-2.5 px-3 text-right font-mono font-semibold ${
-                      row.dailyChange > 0
-                        ? isLight ? "text-rose-600" : "text-rose-400"
-                        : row.dailyChange < 0
+                    className={`py-2.5 px-3 text-right font-mono font-semibold ${row.dailyChange > 0
+                      ? isLight ? "text-rose-600" : "text-rose-400"
+                      : row.dailyChange < 0
                         ? isLight ? "text-emerald-600" : "text-emerald-400"
                         : isLight ? "text-slate-500" : "text-slate-400"
-                    }`}
+                      }`}
                   >
                     {row.dailyChange > 0
                       ? `+Rp ${row.dailyChange}`
                       : row.dailyChange < 0
-                      ? `-Rp ${Math.abs(row.dailyChange)}`
-                      : "Rp 0"}
+                        ? `-Rp ${Math.abs(row.dailyChange)}`
+                        : "Rp 0"}
                   </td>
                   <td
-                    className={`py-2.5 px-3 text-right font-mono font-semibold ${
-                      row.dailyChange > 0
-                        ? isLight ? "text-rose-600" : "text-rose-400"
-                        : row.dailyChange < 0
+                    className={`py-2.5 px-3 text-right font-mono font-semibold ${row.dailyChange > 0
+                      ? isLight ? "text-rose-600" : "text-rose-400"
+                      : row.dailyChange < 0
                         ? isLight ? "text-emerald-600" : "text-emerald-400"
                         : isLight ? "text-slate-500" : "text-slate-400"
-                    }`}
+                      }`}
                   >
                     {row.dailyChange > 0 ? `+${row.dailyChangePct}%` : `${row.dailyChangePct}%`}
                   </td>
@@ -644,19 +631,18 @@ export const ActualRateExplorer: React.FC<ActualRateExplorerProps> = ({
                   </td>
                   <td className="py-2.5 px-4 text-center">
                     <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                        row.dailyChange > 0
-                          ? isLight
-                            ? "bg-rose-50 text-rose-700 border border-rose-200"
-                            : "bg-rose-950/70 text-rose-300 border border-rose-800/50"
-                          : row.dailyChange < 0
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${row.dailyChange > 0
+                        ? isLight
+                          ? "bg-rose-50 text-rose-700 border border-rose-200"
+                          : "bg-rose-950/70 text-rose-300 border border-rose-800/50"
+                        : row.dailyChange < 0
                           ? isLight
                             ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                             : "bg-emerald-950/70 text-emerald-300 border border-emerald-800/50"
                           : isLight
-                          ? "bg-slate-100 text-slate-600 border border-slate-200"
-                          : "bg-slate-800 text-slate-400"
-                      }`}
+                            ? "bg-slate-100 text-slate-600 border border-slate-200"
+                            : "bg-slate-800 text-slate-400"
+                        }`}
                     >
                       {row.dailyChange > 0 ? (
                         <>

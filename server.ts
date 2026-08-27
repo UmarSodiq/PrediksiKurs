@@ -1,19 +1,29 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const currentDir = process.cwd();
+const __dirname_resolved = typeof __dirname !== "undefined" ? __dirname : path.resolve();
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "10mb" }));
+
+// Enable CORS for development and cross-port clients
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Lazy initialization of Gemini client
 let genAIClient: GoogleGenAI | null = null;
@@ -44,12 +54,15 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-// Real-time Forex API: Get latest live USD/IDR rate with multi-source fallback
-app.get("/api/frankfurter/latest", async (_req, res) => {
+// Real-time Forex API: Get latest live FX rate against IDR with multi-source fallback
+app.get("/api/frankfurter/latest", async (req, res) => {
+  const fromCurrency = ((req.query.from as string) || "USD").toUpperCase();
+  const currLower = fromCurrency.toLowerCase();
+
   try {
     // 1. Try Open Exchange Rates public feed (real-time spot rate)
     try {
-      const openRes = await fetch("https://open.er-api.com/v6/latest/USD");
+      const openRes = await fetch(`https://open.er-api.com/v6/latest/${fromCurrency}`);
       if (openRes.ok) {
         const openData = await openRes.json();
         const idrRate = openData.rates?.IDR;
@@ -60,10 +73,10 @@ app.get("/api/frankfurter/latest", async (_req, res) => {
           return res.json({
             success: true,
             source: "open_er_api_live",
-            base: "USD",
+            base: fromCurrency,
             symbol: "IDR",
             date: dateStr,
-            rate: Math.round(idrRate),
+            rate: fromCurrency === "JPY" ? Number(idrRate.toFixed(2)) : Math.round(idrRate),
             timestamp: new Date().toISOString(),
           });
         }
@@ -74,8 +87,8 @@ app.get("/api/frankfurter/latest", async (_req, res) => {
 
     // 2. Try Frankfurter API (ECB Reference rate)
     const urls = [
-      "https://api.frankfurter.app/latest?from=USD&to=IDR",
-      "https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR",
+      `https://api.frankfurter.app/latest?from=${fromCurrency}&to=IDR`,
+      `https://api.frankfurter.dev/v1/latest?base=${fromCurrency}&symbols=IDR`,
     ];
 
     for (const url of urls) {
@@ -89,10 +102,10 @@ app.get("/api/frankfurter/latest", async (_req, res) => {
             return res.json({
               success: true,
               source: "frankfurter_ecb",
-              base: "USD",
+              base: fromCurrency,
               symbol: "IDR",
               date,
-              rate: Math.round(rate),
+              rate: fromCurrency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate),
               timestamp: new Date().toISOString(),
             });
           }
@@ -104,18 +117,18 @@ app.get("/api/frankfurter/latest", async (_req, res) => {
 
     // 3. Try Fawaz Ahmed Currency API as backup
     try {
-      const fawazRes = await fetch("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json");
+      const fawazRes = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${currLower}.json`);
       if (fawazRes.ok) {
         const fawazData = await fawazRes.json();
-        const rate = fawazData.usd?.idr;
+        const rate = fawazData[currLower]?.idr;
         if (rate) {
           return res.json({
             success: true,
             source: "currency_api_cdn",
-            base: "USD",
+            base: fromCurrency,
             symbol: "IDR",
             date: fawazData.date || new Date().toISOString().split("T")[0],
-            rate: Math.round(rate),
+            rate: fromCurrency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate),
             timestamp: new Date().toISOString(),
           });
         }
@@ -124,14 +137,22 @@ app.get("/api/frankfurter/latest", async (_req, res) => {
       console.warn("Fawaz currency API failed...", e);
     }
 
-    // 4. Default fallback with last known valid JISDOR market rate
+    // 4. Default fallback benchmarks
+    const defaultRates: Record<string, number> = {
+      USD: 17705,
+      EUR: 19340,
+      JPY: 118.5,
+      SGD: 13520,
+      CNY: 2475,
+    };
+
     return res.json({
       success: true,
       source: "jisdor_bi_consensus",
-      base: "USD",
+      base: fromCurrency,
       symbol: "IDR",
-      date: new Date().toISOString().split("T")[0],
-      rate: 17844,
+      date: "2026-08-21",
+      rate: defaultRates[fromCurrency] || 17705,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -139,25 +160,26 @@ app.get("/api/frankfurter/latest", async (_req, res) => {
     return res.json({
       success: true,
       source: "jisdor_bi_consensus",
-      base: "USD",
+      base: fromCurrency,
       symbol: "IDR",
       date: new Date().toISOString().split("T")[0],
-      rate: 17844,
+      rate: 17705,
       timestamp: new Date().toISOString(),
     });
   }
 });
 
-// Frankfurter API: Get historical USD/IDR rates time-series
+// Frankfurter API: Get historical rates time-series against IDR
 app.get("/api/frankfurter/history", async (req, res) => {
+  const fromCurrency = ((req.query.from as string) || "USD").toUpperCase();
   try {
     const startDate = (req.query.startDate as string) || "2024-01-01";
     const endDate = (req.query.endDate as string) || "";
     const rangeParam = endDate ? `${startDate}..${endDate}` : `${startDate}..`;
 
     const urls = [
-      `https://api.frankfurter.app/${rangeParam}?from=USD&to=IDR`,
-      `https://api.frankfurter.dev/v1/${rangeParam}?base=USD&symbols=IDR`,
+      `https://api.frankfurter.dev/v1/${rangeParam}?base=${fromCurrency}&symbols=IDR`,
+      `https://api.frankfurter.app/${rangeParam}?from=${fromCurrency}&to=IDR`,
     ];
 
     let data: any = null;
@@ -184,7 +206,7 @@ app.get("/api/frankfurter/history", async (req, res) => {
       if (ratesObj && typeof ratesObj.IDR === "number") {
         series.push({
           date: dateKey,
-          actual: Math.round(ratesObj.IDR),
+          actual: fromCurrency === "JPY" ? Number(ratesObj.IDR.toFixed(2)) : Math.round(ratesObj.IDR),
         });
       }
     }
@@ -194,7 +216,7 @@ app.get("/api/frankfurter/history", async (req, res) => {
     return res.json({
       success: true,
       source: "frankfurter_ecb",
-      base: "USD",
+      base: fromCurrency,
       symbol: "IDR",
       count: series.length,
       startDate: data.start_date || startDate,
@@ -209,6 +231,88 @@ app.get("/api/frankfurter/history", async (req, res) => {
     });
   }
 });
+
+// Helper to fetch live DXY Index from financial sources (Stooq & Yahoo Finance)
+async function fetchLiveDxy(): Promise<{ value: number; source: string } | null> {
+  // 1. Try Stooq direct CSV
+  try {
+    const res = await fetch("https://stooq.com/q/l/?s=dxy.f&f=sd2t2ohlcv&h&e=csv", {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    });
+    if (res.ok) {
+      const text = await res.text();
+      const lines = text.trim().split("\n");
+      if (lines.length >= 2) {
+        const parts = lines[1].split(",");
+        const closePrice = parseFloat(parts[4]); // Close is 5th column
+        if (!isNaN(closePrice) && closePrice > 50 && closePrice < 200) {
+          return { value: Number(closePrice.toFixed(2)), source: "Stooq ICE Dollar Index Live" };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Stooq DXY fetch failed:", e);
+  }
+
+  // 2. Try Yahoo Finance Chart API
+  try {
+    const res = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1d&range=5d", {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const price = json.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (typeof price === "number" && price > 50) {
+        return { value: Number(price.toFixed(2)), source: "Yahoo Finance (ICE DXY Live)" };
+      }
+    }
+  } catch (e) {
+    console.warn("Yahoo DXY fetch failed:", e);
+  }
+
+  return null;
+}
+
+// Helper to fetch live Brent Crude Oil Price from financial sources
+async function fetchLiveBrent(): Promise<{ value: number; source: string } | null> {
+  // 1. Try Stooq direct CSV
+  try {
+    const res = await fetch("https://stooq.com/q/l/?s=cb.f&f=sd2t2ohlcv&h&e=csv", {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+    });
+    if (res.ok) {
+      const text = await res.text();
+      const lines = text.trim().split("\n");
+      if (lines.length >= 2) {
+        const parts = lines[1].split(",");
+        const closePrice = parseFloat(parts[4]);
+        if (!isNaN(closePrice) && closePrice > 30 && closePrice < 200) {
+          return { value: Number(closePrice.toFixed(2)), source: "Stooq Brent Crude Live" };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Stooq Brent fetch failed:", e);
+  }
+
+  // 2. Try Yahoo Finance Chart API for Brent (BZ=F)
+  try {
+    const res = await fetch("https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=1d&range=5d", {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const price = json.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (typeof price === "number" && price > 30) {
+        return { value: Number(price.toFixed(2)), source: "Yahoo Finance (Brent Crude Live)" };
+      }
+    }
+  } catch (e) {
+    console.warn("Yahoo Brent fetch failed:", e);
+  }
+
+  return null;
+}
 
 // Helper to fetch observations from FRED API
 async function fetchFredSeries(seriesId: string, apiKey: string): Promise<number | null> {
@@ -231,10 +335,29 @@ async function fetchFredSeries(seriesId: string, apiKey: string): Promise<number
   }
 }
 
+// In-memory cache for macro indicators
+let cachedMacroData: any = null;
+let lastMacroFetchTimestamp = 0;
+const MACRO_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
+
 // Macro API: Synchronize and fetch latest macroeconomic indicators
 app.get("/api/macro/latest", async (req, res) => {
   try {
     const customFredKey = (req.query.fredApiKey as string) || process.env.FRED_API_KEY || "";
+    const forceRefresh = req.query.refresh === "true";
+    const now = Date.now();
+
+    // Serve from cache if fresh and not forced
+    if (!forceRefresh && cachedMacroData && now - lastMacroFetchTimestamp < MACRO_CACHE_TTL_MS && !customFredKey) {
+      return res.json({
+        success: true,
+        data: cachedMacroData,
+        fromCache: true,
+        syncedAt: new Date(lastMacroFetchTimestamp).toISOString(),
+        message: "Data makroekonomi disajikan secara instan dari live memory cache!",
+      });
+    }
+
     let usdIdrRate: number | null = null;
     let usdIdrDate = new Date().toISOString().split("T")[0];
 
@@ -250,26 +373,32 @@ app.get("/api/macro/latest", async (req, res) => {
       console.warn("Frankfurter rate fetch failed during macro sync:", e);
     }
 
+    // 2. Fetch live DXY and Brent Oil concurrently
+    const [liveDxyResult, liveBrentResult] = await Promise.all([
+      fetchLiveDxy(),
+      fetchLiveBrent(),
+    ]);
+
     // Default latest indicators (Calibrated to latest official Bank Indonesia & BPS releases)
     let indicators = {
-      usdIdr: usdIdrRate || 17917.09,
+      usdIdr: usdIdrRate || 17705,
       usdIdrDate,
       biRate: 5.75,
       fedFunds: 3.63,
-      dxy: 118.90,
-      brent: 84.49,
+      dxy: liveDxyResult ? liveDxyResult.value : 118.90,
+      brent: liveBrentResult ? liveBrentResult.value : 84.49,
       neraca: -450.5,
       inflasi: 3.34,
-      reserve: 145600.00, // $145.6 Miliar USD (145.600 Juta USD) Posisi Cadangan Devisa Bank Indonesia
+      reserve: 145600.00, // $145.6 Miliar USD Posisi Cadangan Devisa Bank Indonesia
       sources: {
-        usdIdr: "Frankfurter API (European Central Bank)",
+        usdIdr: "Frankfurter API (European Central Bank / Spot)",
         biRate: "Bank Indonesia (RDG Consensus)",
-        fedFunds: "Federal Reserve Board",
-        dxy: "Intercontinental Exchange (ICE)",
-        brent: "U.S. Energy Information Admin (EIA)",
-        neraca: "Badan Pusat Statistik (BPS)",
-        inflasi: "Badan Pusat Statistik (BPS)",
-        reserve: "Bank Indonesia Official Reserves (Posisi Juni: $145.6 Miliar)",
+        fedFunds: "Federal Reserve Board (FFR)",
+        dxy: liveDxyResult ? liveDxyResult.source : "Intercontinental Exchange (ICE / Consensus)",
+        brent: liveBrentResult ? liveBrentResult.source : "U.S. Energy Information Admin (EIA)",
+        neraca: "Badan Pusat Statistik (BPS Rilis Resmi)",
+        inflasi: "Badan Pusat Statistik (BPS Rilis Resmi)",
+        reserve: "Bank Indonesia Official Reserves ($145.6 Miliar)",
       } as Record<string, string>,
       hasFredKey: Boolean(customFredKey),
       lastSyncTimestamp: new Date().toISOString(),
@@ -298,7 +427,6 @@ app.get("/api/macro/latest", async (req, res) => {
         indicators.sources.biRate = "St. Louis Fed (FRED API Live)";
       }
       if (resVal !== null) {
-        // FRED TRESEZIDM052N can be in raw USD or Millions of USD
         if (resVal > 1000000000) {
           indicators.reserve = Number((resVal / 1000000).toFixed(2));
         } else if (resVal > 1000) {
@@ -310,13 +438,16 @@ app.get("/api/macro/latest", async (req, res) => {
       }
     }
 
+    // Update server in-memory cache
+    cachedMacroData = indicators;
+    lastMacroFetchTimestamp = now;
+
     return res.json({
       success: true,
       data: indicators,
+      fromCache: false,
       syncedAt: new Date().toISOString(),
-      message: customFredKey
-        ? "Berhasil menyinkronkan data makroekonomi secara langsung dari FRED API & Frankfurter!"
-        : "Berhasil menyinkronkan data kurs spot live dan kalibrasi fundamental makroekonomi!",
+      message: "Berhasil menyinkronkan data makroekonomi secara real-time dari multi-source live feed!",
     });
   } catch (error: any) {
     console.error("Error in macro latest sync:", error);

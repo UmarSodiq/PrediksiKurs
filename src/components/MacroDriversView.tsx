@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Globe,
   TrendingUp,
@@ -44,7 +44,11 @@ import {
   getComputedMacroCorrelations,
   rawMacroCsv,
 } from "../data/macroDatasetHistorical";
-import { fetchLatestMacroIndicators, MacroSyncResult } from "../utils/macroSyncService";
+import {
+  fetchLatestMacroIndicators,
+  MacroSyncResult,
+  getCachedMacroIndicators,
+} from "../utils/macroSyncService";
 
 interface MacroDriversViewProps {
   macroFactors?: MacroFactor[];
@@ -99,34 +103,34 @@ const VARIABLE_CONFIGS: Record<MacroVariableKey, VariableConfig> = {
   },
   brent: {
     key: "brent",
-    name: "Harga Minyak Mentah (Brent)",
-    shortName: "Brent Crude",
+    name: "Minyak Mentah Brent (Brent Crude)",
+    shortName: "Minyak Brent",
     unit: "USD/Bbl",
     color: "#ec4899", // Pink
-    description: "Harga patokan minyak mentah dunia di pasar internasional.",
-    impactNote: "Sebagai net-oil importer, kenaikan harga minyak menambah beban impor energi dan neraca berjalan Indonesia.",
+    description: "Harga patokan minyak mentah internasional yang memengaruhi neraca migas dan subsidi energi.",
+    impactNote: "Kenaikan harga minyak meningkatkan tagihan impor migas RI, berpotensi menekan neraca transaksi berjalan.",
   },
   neraca: {
     key: "neraca",
-    name: "Neraca Perdagangan (Trade Balance)",
+    name: "Neraca Perdagangan RI",
     shortName: "Neraca Dagang",
     unit: "Juta USD",
     color: "#06b6d4", // Cyan
-    description: "Selisih nilai ekspor dan impor barang Indonesia yang dirilis bulanan.",
-    impactNote: "Surplus perdagangan yang konsisten menyuplai devisa hasil ekspor (DHE) dan memperkuat ketahanan fundamental Rupiah.",
+    description: "Selisih nilai ekspor dan impor barang non-migas serta migas Indonesia.",
+    impactNote: "Surplus perdagangan yang konsisten menyuplai likuiditas valuta asing eksportir untuk menopang ketahanan kurs Rupiah.",
   },
   inflasi: {
     key: "inflasi",
-    name: "Tingkat Inflasi Tahunan (YoY)",
-    shortName: "Inflasi RI",
+    name: "Tingkat Inflasi RI (YoY CPI)",
+    shortName: "Tingkat Inflasi",
     unit: "% YoY",
     color: "#f43f5e", // Rose
-    description: "Indeks harga konsumen tahunan Indonesia berdasarkan perhitungan Badan Pusat Statistik (BPS).",
-    impactNote: "Berdasarkan Purchasing Power Parity (PPP), inflasi domestik yang lebih tinggi cenderung melemahkan daya beli mata uang.",
+    description: "Laju perubahan Indeks Harga Konsumen tahunan yang dirilis Badan Pusat Statistik (BPS).",
+    impactNote: "Inflasi yang terkendali dalam rentang target BI (2.5% ± 1%) menjaga daya beli domestik dan premi risiko aset Rupiah.",
   },
   reserve: {
     key: "reserve",
-    name: "Cadangan Devisa Bank Indonesia",
+    name: "Cadangan Devisa RI (Foreign Reserves)",
     shortName: "Cadangan Devisa",
     unit: "Juta USD",
     color: "#a855f7", // Purple
@@ -151,8 +155,13 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [customFredKey, setCustomFredKey] = useState("");
 
-  // Live indicators state (starts with latest dataset reading)
-  const [liveIndicators, setLiveIndicators] = useState<MacroSyncResult | null>(null);
+  // Auto-Refresh Engine
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(true);
+  const [syncIntervalSeconds, setSyncIntervalSeconds] = useState<number>(300); // 5 minutes default
+  const [secondsUntilNextSync, setSecondsUntilNextSync] = useState<number>(300);
+
+  // Live indicators state (initialized from localStorage cache for 0ms delay)
+  const [liveIndicators, setLiveIndicators] = useState<MacroSyncResult | null>(() => getCachedMacroIndicators());
 
   // Edit form state
   const [editValues, setEditValues] = useState<{
@@ -165,7 +174,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
     inflasi: string;
     reserve: string;
   }>({
-    usdIdr: "17917",
+    usdIdr: "17705",
     biRate: "5.75",
     fedFunds: "3.63",
     dxy: "118.90",
@@ -258,7 +267,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
     const reserveInMillions = parsedReserve < 1000 ? parsedReserve * 1000 : parsedReserve;
 
     const newObj: MacroSyncResult = {
-      usdIdr: parseFloat(editValues.usdIdr) || 17917,
+      usdIdr: parseFloat(editValues.usdIdr) || 17705,
       usdIdrDate: new Date().toISOString().split("T")[0],
       biRate: parseFloat(editValues.biRate) || 5.75,
       fedFunds: parseFloat(editValues.fedFunds) || 3.63,
@@ -294,12 +303,12 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
   // Auto-sync handler
   const handleTriggerSync = async () => {
     setIsSyncing(true);
-    setSyncStatus(null);
     try {
-      const res = await fetchLatestMacroIndicators(customFredKey || undefined);
+      const res = await fetchLatestMacroIndicators(customFredKey || undefined, true);
       if (res.success && res.data) {
         setLiveIndicators(res.data);
         setLastSyncTime(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+        setSecondsUntilNextSync(syncIntervalSeconds);
         setSyncStatus({
           type: "success",
           message: res.message || "Data makroekonomi berhasil disinkronkan secara real-time!",
@@ -318,6 +327,34 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // Background Auto-Sync Timer Countdown
+  useEffect(() => {
+    if (!autoSyncEnabled) return;
+
+    const timer = setInterval(() => {
+      setSecondsUntilNextSync((prev) => {
+        if (prev <= 1) {
+          handleTriggerSync();
+          return syncIntervalSeconds;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [autoSyncEnabled, syncIntervalSeconds]);
+
+  // Initial auto sync on component mount
+  useEffect(() => {
+    handleTriggerSync();
+  }, []);
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   const handleCopyCsv = () => {
@@ -340,7 +377,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
   return (
     <div id="macro-drivers-view" className="space-y-6">
       {/* Auto-Sync & Gateway Toolbar */}
-      <div className="bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-slate-900/90 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 shadow-lg backdrop-blur-md">
+      <div className="bg-gradient-to-r from-indigo-950/90 via-slate-900/95 to-slate-900/95 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 shadow-lg backdrop-blur-md">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -350,24 +387,61 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
               <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
                 Sinkronisasi Otomatis Feed Makroekonomi & Kurs
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 text-[10px] font-bold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live API Connected
-              </span>
+              {autoSyncEnabled ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Auto-Sync Aktif ({formatCountdown(secondsUntilNextSync)})
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 text-[10px] font-bold">
+                  Auto-Sync Dijeda
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-300">
-              Gateway otomatis menarik kurs spot live (Frankfurter/ECB) dan menyinkronkan data rilis fundamental (BI-Rate, Fed Funds, DXY, Brent, BPS).
+              Gateway otomatis menarik kurs spot live, DXY, Brent crude, dan kalibrasi indikator moneter (BI-Rate, Fed Funds, BPS).
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Auto-Sync Toggle Switch */}
+            <button
+              onClick={() => setAutoSyncEnabled(!autoSyncEnabled)}
+              className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition shadow-sm ${
+                autoSyncEnabled
+                  ? "bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-300 border-emerald-700/60"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+              }`}
+              title="Aktifkan atau jeda pembaruan otomatis berkala"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${autoSyncEnabled ? "text-emerald-400" : "text-slate-400"}`} />
+              <span>Auto-Sync: {autoSyncEnabled ? "ON" : "OFF"}</span>
+            </button>
+
+            {/* Interval Selector */}
+            <select
+              value={syncIntervalSeconds}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setSyncIntervalSeconds(val);
+                setSecondsUntilNextSync(val);
+              }}
+              aria-label="Pilih Interval Sinkronisasi Otomatis"
+              className="bg-slate-800/90 border border-slate-700 text-slate-200 text-xs rounded-xl px-2.5 py-2 font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+            >
+              <option value={60}>Setiap 1 Menit (High-Freq)</option>
+              <option value={300}>Setiap 5 Menit (Optimal)</option>
+              <option value={900}>Setiap 15 Menit</option>
+              <option value={3600}>Setiap 1 Jam</option>
+            </select>
+
             <button
               onClick={handleOpenEditModal}
               className="py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-indigo-300 border border-indigo-500/40 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
               title="Kustomisasi & Verifikasi Angka Makro Terkini"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Verifikasi / Edit Nilai Terkini</span>
+              <span>Edit Nilai</span>
             </button>
 
             <button
@@ -376,7 +450,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
               title="Pengaturan API Feed (FRED / BPS / EIA)"
             >
               <Key className="w-3.5 h-3.5 text-amber-400" />
-              <span>Kunci API FRED</span>
+              <span>Kunci FRED</span>
               {customFredKey && (
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
               )}
@@ -411,7 +485,7 @@ export const MacroDriversView: React.FC<MacroDriversViewProps> = () => {
               <span>{syncStatus.message}</span>
               {lastSyncTime && (
                 <span className="text-[11px] opacity-80 font-mono">
-                  Waktu Sinkronisasi: {lastSyncTime}
+                  Waktu Terakhir: {lastSyncTime} {autoSyncEnabled ? `(Berikutnya dalam ${formatCountdown(secondsUntilNextSync)})` : ""}
                 </span>
               )}
             </div>

@@ -32,6 +32,19 @@ export type ModelType = "ensemble" | "lstm" | "sarimax" | "prophet" | "xgboost";
 
 export type ForecastHorizon = "30d" | "90d" | "180d" | "1y" | "2y";
 
+export type CurrencyCode = "USD" | "EUR" | "JPY" | "SGD" | "CNY";
+
+export interface CurrencyProfile {
+  code: CurrencyCode;
+  name: string;
+  symbol: string;
+  flag: string;
+  baseRate: number; // approximate benchmark spot rate in IDR
+  spreadMargin: number;
+  description: string;
+  peruriContext: string;
+}
+
 export interface HorizonTargets {
   target30d: number;
   target90d: number;
@@ -94,4 +107,38 @@ export interface AIAnalysisResult {
   };
   modelHealthNote: string;
   recommendations: string[];
+}
+
+export interface BacktestPoint {
+  date: string;
+  actual: number;
+  predicted: number;
+  lowerBound: number;
+  upperBound: number;
+  residual: number;
+  pctError: number;
+  inCorridor: boolean;
+  actualDirection: "UP" | "DOWN" | "FLAT";
+  predictedDirection: "UP" | "DOWN" | "FLAT";
+  directionHit: boolean;
+}
+
+export interface BacktestResult {
+  cutoffDate: string;
+  testStartDate: string;
+  testEndDate: string;
+  trainSampleSize: number;
+  testSampleSize: number;
+  modelType: ModelType;
+  modelName: string;
+  mape: number;
+  rmse: number;
+  mae: number;
+  r2: number;
+  directionalAccuracy: number;
+  corridorHitRate: number;
+  maxOverestimate: number;
+  maxUnderestimate: number;
+  points: BacktestPoint[];
+  inSampleData: { date: string; actual: number }[];
 }
