@@ -29,6 +29,7 @@ import {
 import { ForexDataPoint, ModelProfile, ModelType, CurrencyCode } from "./types";
 import { calculateMetrics, enrichWithMovingAverages } from "./utils/metricsCalculator";
 import { fetchLatestFrankfurterRate } from "./utils/frankfurterService";
+import { RealtimeForexChart } from "./components/RealtimeForexChart";
 import {
   TrendingUp,
   Layers,
@@ -38,6 +39,7 @@ import {
   Sparkles,
   ShieldCheck,
   Globe,
+  Radio,
 } from "lucide-react";
 
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
@@ -48,6 +50,7 @@ function DashboardContent() {
   const [data, setData] = useState<ForexDataPoint[]>(initialForexData);
   const [selectedModelId, setSelectedModelId] = useState<ModelType>("ensemble");
   const [activeTab, setActiveTab] = useState<MainTabType>("overview");
+  const [overviewChartMode, setOverviewChartMode] = useState<"realtime" | "forecast">("realtime");
   
   // Sub-tabs for consolidated views
   const [analysisSubTab, setAnalysisSubTab] = useState<"actuals" | "comparison" | "residuals">("actuals");
@@ -255,20 +258,62 @@ function DashboardContent() {
                   forecast30d={forecast30d}
                 />
 
-                {/* 2. Main Interactive Chart (Actual vs Forecast) */}
-                <MainForexChart
-                  data={data}
-                  selectedModel={selectedModel}
-                  currentSpot={currentSpot}
-                />
+                {/* 2. Chart Mode Switcher (Realtime Live Feed vs Time-Series Horizon Forecast) */}
+                <div className="flex items-center justify-between gap-2 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      id="btn-switch-realtime"
+                      onClick={() => setOverviewChartMode("realtime")}
+                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        overviewChartMode === "realtime"
+                          ? "bg-emerald-600 text-white shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                      }`}
+                    >
+                      <Radio className={`w-3.5 h-3.5 ${overviewChartMode === "realtime" ? "animate-pulse" : ""}`} />
+                      <span>Grafik Realtime (Live Stream)</span>
+                    </button>
 
-                {/* 3. Rate Lookup Panel (Date Search) */}
+                    <button
+                      id="btn-switch-forecast"
+                      onClick={() => setOverviewChartMode("forecast")}
+                      className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        overviewChartMode === "forecast"
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                      }`}
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Grafik Proyeksi Time-Series (AI Model)</span>
+                    </button>
+                  </div>
+
+                  <span className="text-[11px] font-mono text-slate-400 hidden sm:inline pr-2">
+                    {overviewChartMode === "realtime" ? "🔴 Live Market Ticks" : "📊 Multi-Horizon Forecasting (99% CL)"}
+                  </span>
+                </div>
+
+                {/* 3. Interactive Chart Display */}
+                {overviewChartMode === "realtime" ? (
+                  <RealtimeForexChart
+                    selectedCurrency={selectedCurrency}
+                    initialSpotRate={currentSpot}
+                  />
+                ) : (
+                  <MainForexChart
+                    data={data}
+                    selectedModel={selectedModel}
+                    currentSpot={currentSpot}
+                  />
+                )}
+
+                {/* 4. Rate Lookup Panel (Date Search & Continuous Projection) */}
                 <RateLookupPanel 
                   data={data} 
                   selectedModelName={selectedModel.name} 
                 />
 
-                {/* 4. AI Macro Insights */}
+                {/* 5. AI Macro Insights */}
                 <AiAnalystPanel
                   currentSpot={currentSpot}
                   forecast30d={forecast30d}
@@ -403,7 +448,7 @@ function DashboardContent() {
           {/* Footer */}
           <footer className="mt-8 py-4 text-center text-xs text-slate-400 dark:text-slate-500 border-t border-slate-200 dark:border-slate-800/80">
             <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-              <span className="font-mono text-[11px]">{selectedCurrency}/IDR Forecasting Studio • Bank Indonesia JISDOR & Market Data</span>
+              <span className="font-mono text-[11px]">PrediksiKurs • Bank Indonesia JISDOR & Market Data ({selectedCurrency}/IDR)</span>
               <div className="flex items-center gap-3 text-[10px] font-mono">
                 <span>99% Confidence Interval</span>
                 <span>•</span>

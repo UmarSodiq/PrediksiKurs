@@ -57,33 +57,33 @@ export const MainForexChart: React.FC<MainForexChartProps> = ({
     const historical = data.filter((d) => !d.isFuture && d.actual !== null && d.actual !== undefined);
     const future = data.filter((d) => d.isFuture);
 
-    // 2. Determine how many historical trading days to include based on timeRange
+    // 2. Determine how many historical calendar days to include based on timeRange
     const histDaysCount =
       timeRange === "1M"
-        ? 22
+        ? 30
         : timeRange === "3M"
-        ? 65
+        ? 90
         : timeRange === "6M"
-        ? 130
+        ? 180
         : timeRange === "1Y"
-        ? 252
+        ? 365
         : timeRange === "2Y"
-        ? 504
+        ? 730
         : historical.length;
 
     const slicedHistorical = historical.slice(-Math.min(histDaysCount, historical.length));
 
-    // 3. Determine how many future trading days to include based on forecastHorizon
+    // 3. Determine how many future calendar days to include based on forecastHorizon
     const futureDaysCount =
       forecastHorizon === "30d"
         ? 30
         : forecastHorizon === "90d"
-        ? 65
+        ? 90
         : forecastHorizon === "180d"
-        ? 130
+        ? 180
         : forecastHorizon === "1y"
-        ? 252
-        : 504;
+        ? 365
+        : 730;
 
     const slicedFuture = future.slice(0, futureDaysCount).map((d) => {
       if (d.forecast && d.upperBound && d.lowerBound) {
@@ -595,8 +595,8 @@ export const MainForexChart: React.FC<MainForexChartProps> = ({
                 : forecastHorizon === "180d"
                 ? "180 Hari (6 Bulan)"
                 : forecastHorizon === "1y"
-                ? "1 Tahun (252 Hari Bursa)"
-                : "2 Tahun (504 Hari Bursa)"}
+                ? "1 Tahun (365 Hari Kalender)"
+                : "2 Tahun (730 Hari Kalender)"}
             </strong>
           </span>
         </div>

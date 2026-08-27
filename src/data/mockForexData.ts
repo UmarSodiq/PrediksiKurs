@@ -64,6 +64,12 @@ export const currencyProfiles: CurrencyProfile[] = [
   },
 ];
 
+export function addDaysToIsoDate(baseDateStr: string, days: number): string {
+  const [year, month, day] = baseDateStr.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day + days));
+  return d.toISOString().split("T")[0];
+}
+
 // Extract and parse raw JISDOR CSV records
 export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date: string; actual: number }[] {
   const lines = rawJisdorCsv.trim().split("\n");
@@ -106,42 +112,32 @@ export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date
 
   parsedRecords.sort((a, b) => a.date.localeCompare(b.date));
 
-  // Bridge up to current trading period (August 2026)
+  // Bridge up to current trading period (August 2026) with smooth daily consecutive records
   const lastRecord = parsedRecords[parsedRecords.length - 1];
   if (lastRecord && lastRecord.date <= "2026-05-01") {
-    const bridgeDaysUsd = [
-      { date: "2026-05-08", actual: 17415 },
-      { date: "2026-05-15", actual: 17460 },
-      { date: "2026-05-22", actual: 17495 },
-      { date: "2026-05-29", actual: 17530 },
-      { date: "2026-06-05", actual: 17580 },
-      { date: "2026-06-12", actual: 17610 },
-      { date: "2026-06-19", actual: 17665 },
-      { date: "2026-06-26", actual: 17710 },
-      { date: "2026-07-03", actual: 17740 },
-      { date: "2026-07-10", actual: 17765 },
-      { date: "2026-07-17", actual: 17790 },
-      { date: "2026-07-24", actual: 17805 },
-      { date: "2026-07-31", actual: 17815 },
-      { date: "2026-08-07", actual: 17913 },
-      { date: "2026-08-10", actual: 17795 },
-      { date: "2026-08-11", actual: 17824 },
-      { date: "2026-08-12", actual: 17876 },
-      { date: "2026-08-13", actual: 17882 },
-      { date: "2026-08-14", actual: 17836 },
-      { date: "2026-08-18", actual: 17856 },
-      { date: "2026-08-19", actual: 17844 },
-      { date: "2026-08-20", actual: 17779 },
-      { date: "2026-08-21", actual: 17705 },
-    ];
+    // Fill every single calendar day from 2026-05-01 to 2026-08-21 (113 days)
+    const startDateStr = "2026-05-01";
+    const totalBridgeDays = 113; // 2026-05-01 through 2026-08-21
+    const startRate = 17380;
+    const targetSpot = 17705;
 
-    const scaledBridge = bridgeDaysUsd.map((b) => ({
-      date: b.date,
-      actual: currency === "JPY"
-        ? Number((b.actual * ratio).toFixed(2))
-        : Math.round(b.actual * ratio),
-    }));
-    parsedRecords.push(...scaledBridge);
+    for (let k = 0; k < totalBridgeDays; k++) {
+      const dStr = addDaysToIsoDate(startDateStr, k);
+      if (dStr <= lastRecord.date) continue;
+
+      const progress = k / (totalBridgeDays - 1);
+      // Realistic smooth curve with mid-year macro seasonality and micro-volatility
+      const seasonalWave = Math.sin(progress * Math.PI * 2) * 45 + Math.cos(progress * 4) * 20;
+      const baseTrend = startRate + (targetSpot - startRate) * progress;
+      const noise = (Math.sin(k * 1.7) * 18 + Math.cos(k * 2.3) * 12);
+      
+      const unscaledRate = k === totalBridgeDays - 1 ? targetSpot : Math.round(baseTrend + seasonalWave * 0.4 + noise);
+      const scaledRate = currency === "JPY"
+        ? Number((unscaledRate * ratio).toFixed(2))
+        : Math.round(unscaledRate * ratio);
+
+      parsedRecords.push({ date: dStr, actual: scaledRate });
+    }
   }
 
   return parsedRecords;
@@ -248,25 +244,18 @@ export function generateDatasetForModel(
     });
   }
 
-  // Generate 2 Years (504 trading days / ~730 calendar days) of future horizon out-of-sample forecast
+  // Generate 2 Years (730 calendar days) of future horizon out-of-sample forecast
   const lastHist = result[result.length - 1];
   const lastSpot = lastHist ? lastHist.actual || 17705 : 17705;
-  const lastDate = new Date(lastHist ? lastHist.date : "2026-08-21");
-  const futureDays = 504; // 2 Full Years of daily projections (252 days/year)
-
-  // Track advancing business calendar
-  let currCalendarDate = new Date(lastDate);
+  const lastDateStr = lastHist ? lastHist.date : "2026-08-21";
+  const futureDays = 730; // 2 Full Calendar Years of daily projections (365 days * 2)
 
   for (let f = 1; f <= futureDays; f++) {
-    // Advance to next weekday (Monday-Friday)
-    do {
-      currCalendarDate.setDate(currCalendarDate.getDate() + 1);
-    } while (currCalendarDate.getDay() === 0 || currCalendarDate.getDay() === 6);
+    // Exact consecutive calendar day (no skipping, strictly sequential)
+    const dateStr = addDaysToIsoDate(lastDateStr, f);
 
-    const dateStr = currCalendarDate.toISOString().split("T")[0];
-
-    // Annual seasonality harmonic theta (252 trading days = 1 full calendar year)
-    const annualTheta = (f * Math.PI * 2) / 252;
+    // Annual seasonality harmonic theta (365 calendar days = 1 full calendar year)
+    const annualTheta = (f * Math.PI * 2) / 365.25;
     // Q2 dividend season peak (May-June) and Q4 year-end corporate demand
     const seasonalMacroWave = Math.sin(annualTheta - 0.4) * 45 + Math.cos(annualTheta * 2) * 22;
 
@@ -279,48 +268,48 @@ export function generateDatasetForModel(
     switch (modelType) {
       case "lstm":
         // LSTM: Non-linear neural momentum acceleration + multi-year harmonics
-        const lstmDrift = f * 1.90 * scaleRatio;
-        const lstmNeuralWave = (Math.sin(f / 16) * 35 + Math.cos(f / 45) * 40 + seasonalMacroWave) * scaleRatio;
+        const lstmDrift = f * (1.90 * 252 / 365.25) * scaleRatio;
+        const lstmNeuralWave = (Math.sin(f / 20) * 35 + Math.cos(f / 60) * 40 + seasonalMacroWave) * scaleRatio;
         const calcValLstm = lastSpot + lstmDrift + lstmNeuralWave;
         forecastVal = isJpy ? Number(calcValLstm.toFixed(2)) : Math.round(calcValLstm);
-        futureStdErr = (30 + 14.0 * Math.sqrt(f)) * scaleRatio;
+        futureStdErr = (30 + 11.5 * Math.sqrt(f)) * scaleRatio;
         break;
 
       case "sarimax":
         // SARIMAX: Exogenous interest rate differential drift + 52-week annual seasonality
-        const sarimaxDrift = f * 1.55 * scaleRatio;
-        const sarimaxCycle = (Math.sin((f * Math.PI * 2) / 5) * 20 + seasonalMacroWave * 1.2) * scaleRatio;
+        const sarimaxDrift = f * (1.55 * 252 / 365.25) * scaleRatio;
+        const sarimaxCycle = (Math.sin((f * Math.PI * 2) / 7) * 15 + seasonalMacroWave * 1.2) * scaleRatio;
         const calcValSarimax = lastSpot + sarimaxDrift + sarimaxCycle;
         forecastVal = isJpy ? Number(calcValSarimax.toFixed(2)) : Math.round(calcValSarimax);
-        futureStdErr = (35 + 16.5 * Math.sqrt(f)) * scaleRatio;
+        futureStdErr = (35 + 13.5 * Math.sqrt(f)) * scaleRatio;
         break;
 
       case "prophet":
         // Prophet: Bayesian piecewise trend with changepoints + holiday & annual regressors
-        const prophetDrift = f * 1.40 * scaleRatio;
-        const prophetWave = (Math.sin(annualTheta) * 50 + Math.sin(f / 18) * 25) * scaleRatio;
+        const prophetDrift = f * (1.40 * 252 / 365.25) * scaleRatio;
+        const prophetWave = (Math.sin(annualTheta) * 50 + Math.sin(f / 25) * 25) * scaleRatio;
         const calcValProphet = lastSpot + prophetDrift + prophetWave;
         forecastVal = isJpy ? Number(calcValProphet.toFixed(2)) : Math.round(calcValProphet);
-        futureStdErr = (38 + 17.5 * Math.sqrt(f)) * scaleRatio;
+        futureStdErr = (38 + 14.5 * Math.sqrt(f)) * scaleRatio;
         break;
 
       case "xgboost":
         // XGBoost: Partitioned decision regime shifts + lagged momentum
-        const stepIncrement = Math.floor(f / 42) * 28 * scaleRatio;
-        const xgbWave = (Math.sin(f / 14) * 22 + seasonalMacroWave * 0.9) * scaleRatio;
-        const calcValXgb = lastSpot + f * 1.80 * scaleRatio + stepIncrement + xgbWave;
+        const stepIncrement = Math.floor(f / 60) * 28 * scaleRatio;
+        const xgbWave = (Math.sin(f / 20) * 22 + seasonalMacroWave * 0.9) * scaleRatio;
+        const calcValXgb = lastSpot + f * (1.80 * 252 / 365.25) * scaleRatio + stepIncrement + xgbWave;
         forecastVal = isJpy ? Number(calcValXgb.toFixed(2)) : Math.round(calcValXgb);
-        futureStdErr = (32 + 15.0 * Math.sqrt(f)) * scaleRatio;
+        futureStdErr = (32 + 12.5 * Math.sqrt(f)) * scaleRatio;
         break;
 
       case "ensemble":
       default:
         // Ensemble: Optimal consensus projection with Purchasing Power Parity (PPP) inflation spread
-        const ensembleDrift = f * 1.70 * scaleRatio;
-        const ensembleWave = (seasonalMacroWave + Math.sin(f / 12) * 18) * scaleRatio;
+        const ensembleDrift = f * (1.70 * 252 / 365.25) * scaleRatio;
+        const ensembleWave = (seasonalMacroWave + Math.sin(f / 16) * 18) * scaleRatio;
         const calcValEnsemble = lastSpot + ensembleDrift + ensembleWave;
         forecastVal = isJpy ? Number(calcValEnsemble.toFixed(2)) : Math.round(calcValEnsemble);
-        futureStdErr = (26 + 12.5 * Math.sqrt(f)) * scaleRatio; // Tightest 99% CL corridor
+        futureStdErr = (26 + 10.5 * Math.sqrt(f)) * scaleRatio; // Tightest 99% CL corridor
         break;
     }
 
@@ -329,7 +318,7 @@ export function generateDatasetForModel(
     const lowerBound = isJpy ? Number((forecastVal - ciWidth).toFixed(2)) : Math.round(forecastVal - ciWidth);
     const upperBound = isJpy ? Number((forecastVal + ciWidth).toFixed(2)) : Math.round(forecastVal + ciWidth);
 
-    const yearProgress = f / 252;
+    const yearProgress = f / 365.25;
     result.push({
       date: dateStr,
       actual: null,

@@ -48,8 +48,8 @@ export const Header: React.FC<HeaderProps> = ({
               <Activity className="w-4 h-4" />
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100">
-                PERURI <span className="text-indigo-600 dark:text-indigo-400">Forex Studio</span>
+              <span className="font-bold text-sm sm:text-base tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-0.5">
+                Prediksi<span className="text-indigo-600 dark:text-indigo-400">Kurs</span>
               </span>
               <div className="hidden sm:flex items-center gap-1.5">
                 <span className="bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 text-[10px] font-mono px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/60">

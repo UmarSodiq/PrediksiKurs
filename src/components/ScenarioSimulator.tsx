@@ -97,12 +97,12 @@ export const ScenarioSimulator: React.FC<ScenarioSimulatorProps> = ({
       simHorizon === "30d"
         ? 30
         : simHorizon === "90d"
-        ? 65
+        ? 90
         : simHorizon === "180d"
-        ? 130
+        ? 180
         : simHorizon === "1y"
-        ? 252
-        : 504;
+        ? 365
+        : 730;
 
     const fedImpact = (params.fedRateChangeBps / 100) * 220;
     const biImpact = (params.biRateChangeBps / 100) * -160;
