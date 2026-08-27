@@ -30,6 +30,7 @@ import {
 import { ForexDataPoint, ModelProfile, ModelType, CurrencyCode } from "./types";
 import { calculateMetrics, enrichWithMovingAverages } from "./utils/metricsCalculator";
 import { fetchLatestFrankfurterRate } from "./utils/frankfurterService";
+import { fetchCurrencyFreaksLatest } from "./utils/currencyFreaksService";
 import { RealtimeForexChart } from "./components/RealtimeForexChart";
 import {
   TrendingUp,
@@ -150,28 +151,48 @@ function DashboardContent() {
   const handleRefreshData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      const latestSpot = await fetchLatestFrankfurterRate(selectedCurrency).catch(() => null);
+      // 1. Fetch live rate from CurrencyFreaks API (User API Key Active)
+      const liveFreaks = await fetchCurrencyFreaksLatest(true).catch(() => null);
+      let targetRate = 17763.5;
+      let targetDate = new Date().toISOString().split("T")[0];
+
+      if (liveFreaks) {
+        targetRate = selectedCurrency === "JPY"
+          ? liveFreaks.jpyIdr
+          : selectedCurrency === "EUR"
+          ? liveFreaks.eurIdr
+          : selectedCurrency === "SGD"
+          ? liveFreaks.sgdIdr
+          : liveFreaks.usdIdr;
+        if (liveFreaks.timestamp) {
+          targetDate = liveFreaks.timestamp.split(" ")[0] || targetDate;
+        }
+      } else {
+        const frank = await fetchLatestFrankfurterRate(selectedCurrency).catch(() => null);
+        if (frank && frank.rate) {
+          targetRate = frank.rate;
+          targetDate = frank.date || targetDate;
+        }
+      }
       
       let baseDataset = [...data];
-      if (latestSpot && latestSpot.rate) {
-        const existingIdx = baseDataset.findIndex((d) => d.date === latestSpot.date);
-        if (existingIdx >= 0) {
-          baseDataset[existingIdx] = {
-            ...baseDataset[existingIdx],
-            actual: latestSpot.rate,
-            isFuture: false,
-          };
-        } else {
-          baseDataset.push({
-            date: latestSpot.date,
-            actual: latestSpot.rate,
-            forecast: latestSpot.rate,
-            lowerBound: latestSpot.rate - 100,
-            upperBound: latestSpot.rate + 100,
-            isFuture: false,
-          });
-          baseDataset.sort((a, b) => a.date.localeCompare(b.date));
-        }
+      const existingIdx = baseDataset.findIndex((d) => d.date === targetDate);
+      if (existingIdx >= 0) {
+        baseDataset[existingIdx] = {
+          ...baseDataset[existingIdx],
+          actual: targetRate,
+          isFuture: false,
+        };
+      } else {
+        baseDataset.push({
+          date: targetDate,
+          actual: targetRate,
+          forecast: targetRate,
+          lowerBound: targetRate - 100,
+          upperBound: targetRate + 100,
+          isFuture: false,
+        });
+        baseDataset.sort((a, b) => a.date.localeCompare(b.date));
       }
 
       const recalibrated = generateDatasetForModel(selectedModelId, baseDataset, selectedCurrency);

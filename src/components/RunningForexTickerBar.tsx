@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { TrendingUp, TrendingDown, Radio } from "lucide-react";
+import { fetchCurrencyFreaksLatest } from "../utils/currencyFreaksService";
 
 interface TickerItem {
   id: string;
@@ -22,7 +23,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "USD/IDR",
     name: "Dolar AS",
     flag: "🇺🇸",
-    rate: 17784,
+    rate: 17763.5,
     changePct: 0.12,
   },
   {
@@ -30,7 +31,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "EUR/IDR",
     name: "Euro Uni Eropa",
     flag: "🇪🇺",
-    rate: 19340,
+    rate: 20702,
     changePct: -0.08,
   },
   {
@@ -38,7 +39,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "JPY/IDR",
     name: "Yen Jepang",
     flag: "🇯🇵",
-    rate: 118.5,
+    rate: 111.53,
     changePct: 0.25,
   },
   {
@@ -46,7 +47,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "SGD/IDR",
     name: "Dolar Singapura",
     flag: "🇸🇬",
-    rate: 13520,
+    rate: 13970,
     changePct: 0.05,
   },
   {
@@ -54,7 +55,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "CNY/IDR",
     name: "Yuan China (RMB)",
     flag: "🇨🇳",
-    rate: 2475,
+    rate: 2642.5,
     changePct: -0.04,
   },
   {
@@ -62,7 +63,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "GBP/IDR",
     name: "Poundsterling Inggris",
     flag: "🇬🇧",
-    rate: 22840,
+    rate: 24152,
     changePct: 0.19,
   },
   {
@@ -70,7 +71,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "AUD/IDR",
     name: "Dolar Australia",
     flag: "🇦🇺",
-    rate: 11620,
+    rate: 12756,
     changePct: -0.15,
   },
   {
@@ -78,7 +79,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "SAR/IDR",
     name: "Riyal Arab Saudi",
     flag: "🇸🇦",
-    rate: 4720,
+    rate: 4731,
     changePct: 0.08,
   },
   {
@@ -86,7 +87,7 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
     pair: "MYR/IDR",
     name: "Ringgit Malaysia",
     flag: "🇲🇾",
-    rate: 3980,
+    rate: 4411.6,
     changePct: 0.02,
   },
   {
@@ -112,11 +113,52 @@ const INITIAL_TICKER_ITEMS: TickerItem[] = [
 ];
 
 export const RunningForexTickerBar: React.FC<RunningForexTickerBarProps> = ({
-  usdIdrSpot = 17784,
+  usdIdrSpot,
 }) => {
   const [tickerItems, setTickerItems] = useState<TickerItem[]>(INITIAL_TICKER_ITEMS);
 
-  // Sync USD/IDR from prop whenever updated
+  // Fetch live exchange rates directly from CurrencyFreaks API
+  const loadCurrencyFreaksRates = useCallback(async () => {
+    try {
+      const live = await fetchCurrencyFreaksLatest();
+      setTickerItems((prev) =>
+        prev.map((item) => {
+          switch (item.id) {
+            case "USD":
+              return { ...item, rate: live.usdIdr };
+            case "EUR":
+              return { ...item, rate: live.eurIdr };
+            case "JPY":
+              return { ...item, rate: live.jpyIdr };
+            case "SGD":
+              return { ...item, rate: live.sgdIdr };
+            case "CNY":
+              return { ...item, rate: live.cnyIdr };
+            case "GBP":
+              return { ...item, rate: live.gbpIdr };
+            case "AUD":
+              return { ...item, rate: live.audIdr };
+            case "SAR":
+              return { ...item, rate: live.sarIdr };
+            case "MYR":
+              return { ...item, rate: live.myrIdr };
+            default:
+              return item;
+          }
+        })
+      );
+    } catch (e) {
+      console.warn("Ticker failed loading CurrencyFreaks:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCurrencyFreaksRates();
+    const interval = setInterval(loadCurrencyFreaksRates, 60000); // 60s live poll
+    return () => clearInterval(interval);
+  }, [loadCurrencyFreaksRates]);
+
+  // Sync USD/IDR from prop whenever updated from main spot
   useEffect(() => {
     if (usdIdrSpot && usdIdrSpot > 0) {
       setTickerItems((prev) =>
@@ -136,17 +178,17 @@ export const RunningForexTickerBar: React.FC<RunningForexTickerBarProps> = ({
     }
   }, [usdIdrSpot]);
 
-  // Periodic micro-tick simulation for other currency market changes
+  // Periodic micro-tick simulation for active market feel
   useEffect(() => {
     const interval = setInterval(() => {
       setTickerItems((prev) =>
         prev.map((item) => {
-          if (item.id === "USD") return item; // USD handled by main spot sync
+          if (item.id === "USD") return item;
           const delta = (Math.random() - 0.49) * 0.02;
           const newChange = Number((item.changePct + delta).toFixed(2));
           let newRate = item.rate;
 
-          if (item.id === "JPY") {
+          if (item.id === "JPY" || item.id === "MYR" || item.id === "CNY") {
             newRate = Number((item.rate + (Math.random() - 0.5) * 0.05).toFixed(2));
           } else if (item.id === "DXY") {
             newRate = Number((item.rate + (Math.random() - 0.5) * 0.03).toFixed(2));

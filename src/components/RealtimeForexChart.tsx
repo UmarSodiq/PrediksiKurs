@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { CurrencyCode } from "../types";
 import { currencyProfiles } from "../data/mockForexData";
-import { fetchLatestFrankfurterRate } from "../utils/frankfurterService";
+import { fetchCurrencyFreaksLatest } from "../utils/currencyFreaksService";
 import { useTheme } from "../context/ThemeContext";
 
 interface TickPoint {
@@ -115,7 +115,7 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
     return starterPoints;
   });
 
-  // Calculate moving technical indicators over ticks
+  // Calculate live indicators (VWAP, Bollinger Bands, EMA 9 & 21) dynamically
   const enrichedTicks = useMemo(() => {
     let cumVolume = 0;
     let cumVolumePrice = 0;
@@ -180,63 +180,50 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
     direction: "FLAT" as const,
   };
 
-  const initialTick = enrichedTicks[0] || latestTick;
-  const netSessionChange = latestTick.price - initialTick.price;
-  const netSessionChangePct = initialTick.price
-    ? Number(((netSessionChange / initialTick.price) * 100).toFixed(2))
-    : 0;
+  const firstTick = visibleTicks[0] || latestTick;
+  const netSessionChange = selectedCurrency === "JPY"
+    ? Number((latestTick.price - firstTick.price).toFixed(2))
+    : Math.round(latestTick.price - firstTick.price);
+  const netSessionChangePct = firstTick.price ? ((netSessionChange / firstTick.price) * 100).toFixed(2) : "0.00";
 
-  // Session High & Low
-  const { sessionMin, sessionMax } = useMemo(() => {
-    let min = Infinity;
-    let max = -Infinity;
-    visibleTicks.forEach((t) => {
-      if (t.price < min) min = t.price;
-      if (t.price > max) max = t.price;
-      if (showBollinger && t.bbLower && t.bbLower < min) min = t.bbLower;
-      if (showBollinger && t.bbUpper && t.bbUpper > max) max = t.bbUpper;
-    });
+  // Min / Max of current visible window
+  const sessionMin = useMemo(() => {
+    if (!visibleTicks.length) return baseBenchmark - 20;
+    const min = Math.min(...visibleTicks.map((t) => t.price));
+    return selectedCurrency === "JPY" ? Number((min - 0.2).toFixed(2)) : Math.floor(min - 15);
+  }, [visibleTicks, baseBenchmark, selectedCurrency]);
 
-    const isJpy = selectedCurrency === "JPY";
-    const padding = isJpy ? 0.3 : Math.max(10, Math.round((max - min) * 0.15));
-    return {
-      sessionMin: isJpy ? Number((min - padding).toFixed(2)) : Math.floor((min - padding) / 5) * 5,
-      sessionMax: isJpy ? Number((max + padding).toFixed(2)) : Math.ceil((max + padding) / 5) * 5,
-    };
-  }, [visibleTicks, showBollinger, selectedCurrency]);
+  const sessionMax = useMemo(() => {
+    if (!visibleTicks.length) return baseBenchmark + 20;
+    const max = Math.max(...visibleTicks.map((t) => t.price));
+    return selectedCurrency === "JPY" ? Number((max + 0.2).toFixed(2)) : Math.ceil(max + 15);
+  }, [visibleTicks, baseBenchmark, selectedCurrency]);
 
-  // Market Spread
-  const spreadValue = selectedCurrency === "JPY"
-    ? Number((latestTick.ask - latestTick.bid).toFixed(2))
-    : Math.round(latestTick.ask - latestTick.bid);
+  const spreadValue = selectedCurrency === "JPY" ? (latestTick.ask - latestTick.bid).toFixed(2) : (latestTick.ask - latestTick.bid).toLocaleString("id-ID");
+  const spreadBps = ((Math.abs(latestTick.ask - latestTick.bid) / (latestTick.price || 1)) * 10000).toFixed(1);
 
-  const spreadBps = Number(((spreadValue / latestTick.price) * 10000).toFixed(1));
-
-  // Determine Live Technical Signal
+  // Technical Signal Generator
   const liveSignal = useMemo(() => {
-    if (!latestTick.ema9 || !latestTick.ema21) return { text: "NETRAL", color: "text-amber-400", bg: "bg-amber-950/40 border-amber-800/50" };
-    const diff = latestTick.ema9 - latestTick.ema21;
-    if (diff > (selectedCurrency === "JPY" ? 0.04 : 8)) {
-      return { text: "STRONG BUY • Momentum Menguat", color: "text-emerald-400", bg: "bg-emerald-950/50 border-emerald-700/60" };
-    } else if (diff > 0) {
-      return { text: "BUY • Konsolidasi Positif", color: "text-emerald-300", bg: "bg-emerald-950/30 border-emerald-800/40" };
-    } else if (diff < (selectedCurrency === "JPY" ? -0.04 : -8)) {
-      return { text: "STRONG SELL • Tekanan Jual", color: "text-rose-400", bg: "bg-rose-950/50 border-rose-700/60" };
-    } else {
-      return { text: "NETRAL • Rentang Terbatas", color: "text-amber-300", bg: "bg-amber-950/30 border-amber-800/40" };
+    if (latestTick.ema9 && latestTick.ema21) {
+      if (latestTick.ema9 > latestTick.ema21 + (selectedCurrency === "JPY" ? 0.04 : 8)) {
+        return { text: "BULLISH (UPTREND)", color: "text-emerald-400", bg: "bg-emerald-950/60 border-emerald-800/60" };
+      }
+      if (latestTick.ema9 < latestTick.ema21 - (selectedCurrency === "JPY" ? 0.04 : 8)) {
+        return { text: "BEARISH (DOWNTREND)", color: "text-rose-400", bg: "bg-rose-950/60 border-rose-800/60" };
+      }
     }
+    return { text: "NETRAL (CONSOLIDATION)", color: "text-amber-400", bg: "bg-amber-950/60 border-amber-800/60" };
   }, [latestTick, selectedCurrency]);
 
-  // Realtime Live Stream Generator
+  // Tick generator logic
   const generateNextTick = useCallback(() => {
     setTicks((prev) => {
-      const last = prev[prev.length - 1];
+      const last = prev[prev.length - 1] || { price: baseBenchmark };
       const now = new Date();
       const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
       const isJpy = selectedCurrency === "JPY";
-      // Ornstein-Uhlenbeck mean-reverting process towards base benchmark with Brownian noise
-      const meanReversion = (baseBenchmark - last.price) * 0.08;
+      const meanReversion = (baseBenchmark - last.price) * 0.04;
       const volatility = isJpy ? 0.06 : Math.max(4, Math.round(baseBenchmark * 0.0004));
       const randomShock = (Math.random() - 0.49) * volatility * 2;
       const delta = meanReversion + randomShock;
@@ -247,7 +234,6 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
       const diff = nextPrice - last.price;
       const dir: "UP" | "DOWN" | "FLAT" = diff > 0 ? "UP" : diff < 0 ? "DOWN" : "FLAT";
 
-      // Trigger flash effect
       setFlashDirection(dir === "FLAT" ? null : dir);
       setTimeout(() => setFlashDirection(null), 800);
 
@@ -267,7 +253,6 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
         direction: dir,
       };
 
-      // Keep maximum 250 ticks in memory
       const updated = [...prev, newPoint];
       return updated.length > 250 ? updated.slice(-250) : updated;
     });
@@ -283,42 +268,51 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
     return () => clearInterval(interval);
   }, [isPlaying, speedInterval, generateNextTick]);
 
-  // Re-sync with Live External API
+  // Re-sync with Live External API (CurrencyFreaks API)
   const handleForceLiveSync = async () => {
     setIsSyncing(true);
     try {
-      const live = await fetchLatestFrankfurterRate(selectedCurrency);
-      if (live && live.rate) {
+      const live = await fetchCurrencyFreaksLatest(true);
+      const rateKey = selectedCurrency === "JPY" ? live.jpyIdr : selectedCurrency === "EUR" ? live.eurIdr : selectedCurrency === "SGD" ? live.sgdIdr : live.usdIdr;
+
+      if (rateKey && rateKey > 0) {
         setTicks((prev) => {
           const now = new Date();
           const timeStr = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-          const price = live.rate;
+          const price = rateKey;
           const isJpy = selectedCurrency === "JPY";
           const spread = isJpy ? 0.08 : Math.max(15, Math.round(price * 0.0008));
           const bid = isJpy ? Number((price - spread / 2).toFixed(2)) : price - Math.round(spread / 2);
           const ask = isJpy ? Number((price + spread / 2).toFixed(2)) : price + Math.round(spread / 2);
 
-          const syncedPoint: TickPoint = {
+          const syncPoint: TickPoint = {
             time: timeStr,
             timestamp: now.getTime(),
             price,
             bid,
             ask,
-            volume: 150,
+            volume: 120,
             change: 0,
             changePct: 0,
             direction: "FLAT",
           };
-          return [...prev, syncedPoint].slice(-250);
+
+          return [...prev.slice(-40), syncPoint];
         });
+
         setLastLiveSyncTime(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       }
-    } catch (e) {
-      console.warn("Live sync error:", e);
+    } catch (err) {
+      console.warn("Realtime chart sync failed:", err);
     } finally {
       setIsSyncing(false);
     }
   };
+
+  // Initial Sync on load
+  useEffect(() => {
+    handleForceLiveSync();
+  }, [selectedCurrency]);;
 
   // Custom Live Tooltip
   const CustomLiveTooltip = ({ active, payload }: any) => {
@@ -844,12 +838,12 @@ export const RealtimeForexChart: React.FC<RealtimeForexChartProps> = ({
           </span>
           <span className="text-slate-500 hidden sm:inline">•</span>
           <span className="text-slate-300 font-medium flex flex-wrap items-center gap-1">
-            <span className="text-slate-400 font-normal">Sumber Data:</span>
-            <span className="font-semibold text-indigo-300">Open Exchange Rates API</span>
-            <span className="text-slate-500">/</span>
-            <span className="font-semibold text-emerald-300">Bank Indonesia (JISDOR)</span>
-            <span className="text-slate-500">/</span>
-            <span className="font-semibold text-amber-300">Frankfurter (ECB Feed)</span>
+            <span className="text-slate-400 font-normal">Sumber Data Live:</span>
+            <span className="font-bold text-indigo-400">CurrencyFreaks API (Live Feed)</span>
+            <span className="text-slate-500">•</span>
+            <span className="font-semibold text-emerald-400">Bank Indonesia (JISDOR)</span>
+            <span className="text-slate-500">•</span>
+            <span className="font-semibold text-amber-400">Frankfurter (ECB Feed)</span>
           </span>
         </div>
 
