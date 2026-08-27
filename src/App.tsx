@@ -16,7 +16,7 @@ import { ScenarioSimulator } from "./components/ScenarioSimulator";
 import { BacktestReplayView } from "./components/BacktestReplayView";
 import { AiAnalystPanel } from "./components/AiAnalystPanel";
 import { RateLookupPanel } from "./components/RateLookupPanel";
-import { CurrencySelector } from "./components/CurrencySelector";
+import { RunningForexTickerBar } from "./components/RunningForexTickerBar";
 import { DataModelManagerModal } from "./components/DataModelManagerModal";
 import { InfoModal } from "./components/InfoModal";
 import {
@@ -203,6 +203,9 @@ function DashboardContent() {
         selectedCurrency={selectedCurrency}
       />
 
+      {/* Live Forex Running Ticker Marquee Bar */}
+      <RunningForexTickerBar usdIdrSpot={currentSpot} />
+
       {/* Main Layout Body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Consolidated Sidebar */}
@@ -224,17 +227,20 @@ function DashboardContent() {
             {/* TAB 1: DASHBOARD (OVERVIEW, METRICS, CHART & AI INSIGHTS) */}
             {activeTab === "overview" && (
               <div className="space-y-4">
-                {/* Control Toolbar: Currency Switcher & Workspace Context */}
+                {/* Control Toolbar: Currency Focus Badge & Workspace Context */}
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-2.5 sm:px-4 shadow-sm">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
-                      Mata Uang Acuan:
+                      Fokus Kurs:
                     </span>
-                    <CurrencySelector
-                      selectedCurrency={selectedCurrency}
-                      onSelectCurrency={handleSelectCurrency}
-                      currentSpot={currentSpot}
-                    />
+                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1 shadow-2xs">
+                      <span className="text-sm">🇺🇸</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white font-mono">USD / IDR</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">(Dolar AS)</span>
+                      <span className="ml-1 text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded font-mono font-bold border border-indigo-200 dark:border-indigo-800/50">
+                        JISDOR BI
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-3 text-xs">
