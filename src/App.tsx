@@ -61,7 +61,12 @@ function DashboardContent() {
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>("");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
 
   // Dynamic metrics based on current dataset
   const activeMetrics = useMemo(() => {
