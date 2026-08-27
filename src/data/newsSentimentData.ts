@@ -15,6 +15,7 @@ export interface NewsSentimentItem {
   mechanismExplanation: string;
   tags: string[];
   confidenceScore: number; // e.g. 94%
+  url: string;
 }
 
 export interface SentimentMetricsSummary {
@@ -49,6 +50,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Suku bunga yang kompetitif mempertahankan spread yield positif terhadap obligasi AS (US Treasury) dan menekan aksi spekulasi valas di pasar domestik.",
     tags: ["#BIRate", "#SRBI", "#IntervensiDevisa", "#BankIndonesia"],
     confidenceScore: 96,
+    url: "https://www.bi.go.id/id/publikasi/ruang-media/news-release/Pages/sp_2615024.aspx",
   },
   {
     id: "news-02",
@@ -67,6 +69,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Penurunan suku bunga AS menurunkan daya tarik aset berbasis Dolar, mendorong investor global merotasi likuiditas ke aset berimbal hasil lebih tinggi di emerging markets.",
     tags: ["#TheFed", "#RateCut", "#DXYIndex", "#FOMC"],
     confidenceScore: 92,
+    url: "https://www.bloomberg.com/markets",
   },
   {
     id: "news-03",
@@ -85,6 +88,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Cadangan devisa yang tebal meningkatkan persepsi kredibilitas stabilitas eksternal RI di mata lembaga pemeringkat kredit internasional (S&P, Moody's, Fitch).",
     tags: ["#CadanganDevisa", "#KetahananEksternal", "#RatingKredit"],
     confidenceScore: 95,
+    url: "https://www.bi.go.id/id/statistik/ekonomi-keuangan/ssp/cadangan-devisa.aspx",
   },
   {
     id: "news-04",
@@ -103,6 +107,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Sebagai net-oil importer, kenaikan harga minyak dunia memicu kenaikan kebutuhan USD untuk pembelian BBM dan menekan neraca transaksi berjalan (Current Account Deficit).",
     tags: ["#MinyakBrent", "#Energi", "#NeracaMigas", "#InflasiImpor"],
     confidenceScore: 89,
+    url: "https://www.reuters.com/business/energy/",
   },
   {
     id: "news-05",
@@ -121,6 +126,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Aliran dana surplus ekspor yang terparkir dalam rekening valas domestik memberikan likuiditas devisa alami tanpa menguras cadangan devisa bank sentral.",
     tags: ["#SurplusDagang", "#BPS", "#EksporCPO", "#Hilirisasi"],
     confidenceScore: 94,
+    url: "https://www.bps.go.id/id/pressrelease",
   },
   {
     id: "news-06",
@@ -139,6 +145,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Ketidakpastian arah data tenaga kerja menahan volume transaksi besar antar-bank sebelum ada kepastian sinyal fundamental baru.",
     tags: ["#DXY", "#NonFarmPayrolls", "#PasarUang", "#Sideways"],
     confidenceScore: 87,
+    url: "https://www.cnbcindonesia.com/market",
   },
   {
     id: "news-07",
@@ -157,6 +164,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Konversi mata uang asing menjadi Rupiah oleh investor institusi luar negeri untuk membeli obligasi negara meningkatkan permintaan spot IDR.",
     tags: ["#SBN", "#Kemenkeu", "#Oversubscribed", "#ForeignInflow"],
     confidenceScore: 91,
+    url: "https://www.djppr.kemenkeu.go.id/",
   },
   {
     id: "news-08",
@@ -175,6 +183,7 @@ export const mockNewsSentimentList: NewsSentimentItem[] = [
     mechanismExplanation: "Penurunan aktivitas industri manufaktur global mengurangi volume ekspor komoditas industri Indonesia.",
     tags: ["#PMIManufacturing", "#MitraDagang", "#EksporGlobal"],
     confidenceScore: 86,
+    url: "https://market.bisnis.com/",
   },
 ];
 

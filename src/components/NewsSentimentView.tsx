@@ -602,17 +602,45 @@ export const NewsSentimentView: React.FC<NewsSentimentViewProps> = ({
                         </span>
                       </div>
 
-                      {/* Headline */}
-                      <h4 className="text-sm font-bold text-white leading-snug hover:text-indigo-300 transition cursor-pointer"
-                        onClick={() => setExpandedNewsId(isExpanded ? null : item.id)}
-                      >
-                        {item.headline}
-                      </h4>
+                      {/* Headline (Clickable to external news website) */}
+                      <div className="flex items-start gap-2">
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Buka berita langsung di website sumber resmi"
+                          className="text-sm font-bold text-white hover:text-indigo-400 leading-snug transition flex items-start gap-1.5 group"
+                        >
+                          <span className="group-hover:underline">{item.headline}</span>
+                          <ExternalLink className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+                        </a>
+                      </div>
 
                       {/* Summary */}
                       <p className="text-xs text-slate-300 leading-relaxed">
                         {item.summary}
                       </p>
+
+                      {/* Action Bar: External Link & AI Mechanism Toggle */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/35 text-indigo-300 border border-indigo-500/40 text-[11px] font-semibold transition"
+                        >
+                          <span>Buka Website Sumber Asli</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+
+                        <button
+                          onClick={() => setExpandedNewsId(isExpanded ? null : item.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-medium transition"
+                        >
+                          <span>{isExpanded ? "Tutup Analisis" : "Mekanisme Transmisi AI"}</span>
+                          <span className="text-[10px]">{isExpanded ? "▲" : "▼"}</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Sentiment Badge & Score */}
@@ -660,16 +688,28 @@ export const NewsSentimentView: React.FC<NewsSentimentViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Tags */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {item.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-2 py-0.5 rounded-md bg-slate-900 text-indigo-300/90 border border-slate-800 text-[10px] font-mono"
-                          >
-                            {tag}
-                          </span>
-                        ))}
+                      {/* Tags & External Link Button */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {item.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="px-2 py-0.5 rounded-md bg-slate-900 text-indigo-300/90 border border-slate-800 text-[10px] font-mono"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold"
+                        >
+                          <span>Kunjungi {item.source}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                     </div>
                   )}
