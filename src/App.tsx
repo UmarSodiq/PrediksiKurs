@@ -326,52 +326,24 @@ function DashboardContent() {
         <main className="flex-1 overflow-y-auto w-full p-3 sm:p-5 lg:p-6">
           <div className="max-w-7xl mx-auto space-y-5">
 
-            {/* TAB 1: DASHBOARD (OVERVIEW, METRICS, CHART & AI INSIGHTS) */}
+            {/* TAB 1: DASHBOARD (OVERVIEW, CHART & DUAL-PANEL COCKPIT) */}
             {activeTab === "overview" && (
-              <div className="space-y-4">
-                {/* Control Toolbar: Currency Focus Badge & Workspace Context */}
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-2.5 sm:px-4 shadow-sm">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
-                      Fokus Kurs:
-                    </span>
-                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1 shadow-2xs">
-                      <span className="text-sm">🇺🇸</span>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white font-mono">USD / IDR</span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">(Dolar AS)</span>
-                      <span className="ml-1 text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded font-mono font-bold border border-indigo-200 dark:border-indigo-800/50">
-                        JISDOR BI
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-xs">
-                    <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
-                      <span>Model: <b className="text-slate-700 dark:text-slate-200 font-semibold">{selectedModel.name}</b></span>
-                    </div>
-                    {lastSyncTime && (
-                      <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
-                        • Sinkron: {lastSyncTime} WIB
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* 1. Chart Mode Switcher (Realtime Live Feed vs Time-Series Horizon Forecast) */}
-                <div className="flex items-center justify-between gap-2 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm">
-                  <div className="flex items-center gap-1.5">
+              <div className="space-y-5">
+                {/* Unified Executive Chart Control & Context Header */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-2.5 sm:px-4 shadow-xs">
+                  {/* Left: Chart Mode Segmented Switch */}
+                  <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-800">
                     <button
                       id="btn-switch-realtime"
                       onClick={() => setOverviewChartMode("realtime")}
                       className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                         overviewChartMode === "realtime"
                           ? "bg-emerald-600 text-white shadow-sm"
-                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                       }`}
                     >
                       <Radio className={`w-3.5 h-3.5 ${overviewChartMode === "realtime" ? "animate-pulse" : ""}`} />
-                      <span>Grafik Realtime (Live Stream)</span>
+                      <span>Realtime Stream</span>
                     </button>
 
                     <button
@@ -380,20 +352,34 @@ function DashboardContent() {
                       className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                         overviewChartMode === "forecast"
                           ? "bg-indigo-600 text-white shadow-sm"
-                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                       }`}
                     >
                       <TrendingUp className="w-3.5 h-3.5" />
-                      <span>Grafik Proyeksi Time-Series (AI Model)</span>
+                      <span>Proyeksi AI Multi-Horizon</span>
                     </button>
                   </div>
 
-                  <span className="text-[11px] font-mono text-slate-400 hidden sm:inline pr-2">
-                    {overviewChartMode === "realtime" ? "🔴 Live Market Ticks" : "📊 Multi-Horizon Forecasting (99% CL)"}
-                  </span>
+                  {/* Right: Live Market Status & Model Badges */}
+                  <div className="flex items-center gap-2.5 text-xs">
+                    <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px] font-mono">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                      <span className="text-slate-500 dark:text-slate-400">Model:</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{selectedModel.name}</span>
+                    </div>
+
+                    <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                      <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 font-semibold">
+                        JISDOR BI Resmi
+                      </span>
+                      {lastSyncTime && (
+                        <span>• {lastSyncTime} WIB</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {/* 2. Interactive Chart Display */}
+                {/* Main Interactive Chart Display */}
                 {overviewChartMode === "realtime" ? (
                   <RealtimeForexChart
                     selectedCurrency={selectedCurrency}
@@ -407,19 +393,19 @@ function DashboardContent() {
                   />
                 )}
 
-                {/* 3. Rate Lookup Panel (Date Search & Continuous Projection) */}
-                <RateLookupPanel 
-                  data={data} 
-                  selectedModelName={selectedModel.name} 
-                />
-
-                {/* 4. AI Macro Insights */}
-                <AiAnalystPanel
-                  currentSpot={currentSpot}
-                  forecast30d={forecast30d}
-                  selectedModel={selectedModel}
-                  metrics={activeMetrics}
-                />
+                {/* 2-Column Responsive Cockpit Grid (Rate Lookup & AI Market Intelligence) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                  <RateLookupPanel 
+                    data={data} 
+                    selectedModelName={selectedModel.name} 
+                  />
+                  <AiAnalystPanel
+                    currentSpot={currentSpot}
+                    forecast30d={forecast30d}
+                    selectedModel={selectedModel}
+                    metrics={activeMetrics}
+                  />
+                </div>
               </div>
             )}
 
@@ -435,13 +421,13 @@ function DashboardContent() {
                 />
 
                 {/* Clean Enterprise Sub-Navigation Pills */}
-                <div className="flex items-center gap-1 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-1.5 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-1.5 shadow-xs overflow-x-auto no-scrollbar">
                   <button
                     onClick={() => setAnalysisSubTab("actuals")}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs transition ${
                       analysisSubTab === "actuals"
-                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                        ? "bg-indigo-600 text-white font-bold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-900"
                     }`}
                   >
                     <TrendingUp className="w-3.5 h-3.5" />
@@ -450,10 +436,10 @@ function DashboardContent() {
 
                   <button
                     onClick={() => setAnalysisSubTab("comparison")}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs transition ${
                       analysisSubTab === "comparison"
-                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                        ? "bg-indigo-600 text-white font-bold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-900"
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
@@ -462,10 +448,10 @@ function DashboardContent() {
 
                   <button
                     onClick={() => setAnalysisSubTab("residuals")}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs transition ${
                       analysisSubTab === "residuals"
-                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                        ? "bg-indigo-600 text-white font-bold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-900"
                     }`}
                   >
                     <BarChart2 className="w-3.5 h-3.5" />
@@ -504,13 +490,13 @@ function DashboardContent() {
             {activeTab === "macro-sim" && (
               <div className="space-y-4">
                 {/* Clean Enterprise Sub-Navigation Pills */}
-                <div className="flex items-center gap-1 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-xl p-1.5 shadow-sm overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-1.5 bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-1.5 shadow-xs overflow-x-auto no-scrollbar">
                   <button
                     onClick={() => setMacroSubTab("macro")}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs transition ${
                       macroSubTab === "macro"
-                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                        ? "bg-indigo-600 text-white font-bold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-900"
                     }`}
                   >
                     <PieChart className="w-3.5 h-3.5" />
@@ -519,10 +505,10 @@ function DashboardContent() {
 
                   <button
                     onClick={() => setMacroSubTab("simulator")}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs transition ${
                       macroSubTab === "simulator"
-                        ? "bg-indigo-600 text-white font-semibold shadow-sm"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                        ? "bg-indigo-600 text-white font-bold shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-900"
                     }`}
                   >
                     <Sliders className="w-3.5 h-3.5" />
