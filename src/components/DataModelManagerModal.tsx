@@ -22,6 +22,12 @@ import {
   fetchHistoricalFrankfurterSeries,
   mergeFrankfurterDataIntoDataset,
 } from "../utils/frankfurterService";
+import {
+  parseBiXmlDataSet,
+  fetchBankIndonesiaLatest,
+  BiRatesMap,
+} from "../utils/biApiService";
+import { Landmark } from "lucide-react";
 
 interface DataModelManagerModalProps {
   isOpen: boolean;
@@ -38,7 +44,7 @@ export const DataModelManagerModal: React.FC<DataModelManagerModalProps> = ({
   onSaveData,
   onResetToDefault,
 }) => {
-  const [activeTab, setActiveTab] = useState<"upload" | "editor" | "code" | "presets">("upload");
+  const [activeTab, setActiveTab] = useState<"upload" | "bi_xml" | "editor" | "code" | "presets">("upload");
   const [copiedCode, setCopiedCode] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
@@ -52,8 +58,91 @@ export const DataModelManagerModal: React.FC<DataModelManagerModalProps> = ({
   const [newActual, setNewActual] = useState("");
   const [newForecast, setNewForecast] = useState("");
   const [isSyncingFrankfurter, setIsSyncingFrankfurter] = useState(false);
+  const [isSyncingBi, setIsSyncingBi] = useState(false);
+  const [biXmlText, setBiXmlText] = useState("");
 
   if (!isOpen) return null;
+
+  // Sync latest rate directly from Bank Indonesia API (wskursbi.asmx)
+  const handleSyncBankIndonesia = async () => {
+    setIsSyncingBi(true);
+    setUploadError(null);
+    setUploadSuccess(null);
+    try {
+      const biRates = await fetchBankIndonesiaLatest();
+      if (!biRates) throw new Error("Gagal terhubung ke service wskursbi.asmx Bank Indonesia.");
+      
+      const newPoint: ForexDataPoint = {
+        date: biRates.date,
+        actual: biRates.usdIdr,
+        forecast: biRates.usdIdr,
+        lowerBound: biRates.usdIdr - 100,
+        upperBound: biRates.usdIdr + 100,
+        isFuture: false,
+      };
+
+      const existingIdx = currentData.findIndex((d) => d.date === biRates.date);
+      let updated: ForexDataPoint[];
+      if (existingIdx >= 0) {
+        updated = [...currentData];
+        updated[existingIdx] = { ...updated[existingIdx], actual: biRates.usdIdr, isFuture: false };
+      } else {
+        updated = [...currentData, newPoint].sort((a, b) => a.date.localeCompare(b.date));
+      }
+
+      const enriched = enrichWithMovingAverages(updated);
+      setEditableRows(enriched);
+      onSaveData(enriched);
+      setUploadSuccess(
+        `Berhasil menyinkronkan data resmi Bank Indonesia (${biRates.date}): USD/IDR Rp ${biRates.usdIdr.toLocaleString("id-ID")} (Beli: Rp ${biRates.usdBeli.toLocaleString("id-ID")}, Jual: Rp ${biRates.usdJual.toLocaleString("id-ID")})`
+      );
+    } catch (err: any) {
+      setUploadError(err.message || "Gagal menarik data Bank Indonesia");
+    } finally {
+      setIsSyncingBi(false);
+    }
+  };
+
+  // Import raw XML DataSet from Bank Indonesia
+  const handleImportBiXml = () => {
+    setUploadError(null);
+    setUploadSuccess(null);
+    try {
+      if (!biXmlText.trim()) throw new Error("Silakan tempelkan konten XML DataSet Bank Indonesia terlebih dahulu.");
+      const records = parseBiXmlDataSet(biXmlText);
+      if (records.length === 0) {
+        throw new Error("Format XML tidak valid atau tidak memuat elemen <Table> subkursasing Bank Indonesia.");
+      }
+
+      const usdRec = records.find((r) => r.currency === "USD") || records[0];
+      const newPoint: ForexDataPoint = {
+        date: usdRec.date,
+        actual: usdRec.tengah,
+        forecast: usdRec.tengah,
+        lowerBound: usdRec.tengah - 100,
+        upperBound: usdRec.tengah + 100,
+        isFuture: false,
+      };
+
+      const existingIdx = currentData.findIndex((d) => d.date === usdRec.date);
+      let updated: ForexDataPoint[];
+      if (existingIdx >= 0) {
+        updated = [...currentData];
+        updated[existingIdx] = { ...updated[existingIdx], actual: usdRec.tengah, isFuture: false };
+      } else {
+        updated = [...currentData, newPoint].sort((a, b) => a.date.localeCompare(b.date));
+      }
+
+      const enriched = enrichWithMovingAverages(updated);
+      setEditableRows(enriched);
+      onSaveData(enriched);
+      setUploadSuccess(
+        `Berhasil memproses XML DataSet BI: Ditemukan ${records.length} valuta asing. Kurs USD/IDR ${usdRec.date} diperbarui ke Rp ${usdRec.tengah.toLocaleString("id-ID")}.`
+      );
+    } catch (err: any) {
+      setUploadError(err.message || "Gagal memproses XML Bank Indonesia");
+    }
+  };
 
   // Sync historical series directly from Frankfurter API
   const handleSyncFrankfurter = async () => {
@@ -238,10 +327,10 @@ export const DataModelManagerModal: React.FC<DataModelManagerModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-950/40 px-4 gap-2">
+        <div className="flex border-b border-slate-800 bg-slate-950/40 px-4 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab("upload")}
-            className={`py-2.5 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition ${
+            className={`py-2.5 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition whitespace-nowrap ${
               activeTab === "upload"
                 ? "border-indigo-500 text-indigo-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
@@ -252,8 +341,20 @@ export const DataModelManagerModal: React.FC<DataModelManagerModalProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab("bi_xml")}
+            className={`py-2.5 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition whitespace-nowrap ${
+              activeTab === "bi_xml"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Landmark className="w-3.5 h-3.5" />
+            API & XML Bank Indonesia (wskursbi)
+          </button>
+
+          <button
             onClick={() => setActiveTab("editor")}
-            className={`py-2.5 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition ${
+            className={`py-2.5 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition whitespace-nowrap ${
               activeTab === "editor"
                 ? "border-indigo-500 text-indigo-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
@@ -265,7 +366,7 @@ export const DataModelManagerModal: React.FC<DataModelManagerModalProps> = ({
 
           <button
             onClick={() => setActiveTab("code")}
-            className={`py-2.5 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition ${
+            className={`py-2.5 px-3 text-xs font-semibold border-b-2 flex items-center gap-1.5 transition whitespace-nowrap ${
               activeTab === "code"
                 ? "border-indigo-500 text-indigo-400"
                 : "border-transparent text-slate-400 hover:text-slate-200"
@@ -281,6 +382,37 @@ export const DataModelManagerModal: React.FC<DataModelManagerModalProps> = ({
           {/* TAB 1: UPLOAD */}
           {activeTab === "upload" && (
             <div className="space-y-4">
+              {/* Bank Indonesia Live Sync Card (Primary Source) */}
+              <div className="bg-gradient-to-r from-emerald-950/80 to-slate-900 border border-emerald-700/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-emerald-900/60 text-emerald-300">
+                    <Landmark className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-white text-xs flex items-center gap-2">
+                      <span>Sinkronisasi Resmi Bank Indonesia</span>
+                      <span className="text-[10px] bg-emerald-900 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">wskursbi.asmx</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      Tarik kurs acuan resmi JISDOR dan kurs transaksi perbankan (Beli & Jual) langsung dari Web Service Bank Indonesia.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSyncBankIndonesia}
+                  disabled={isSyncingBi}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold px-4 py-2 rounded-lg transition flex items-center justify-center gap-2 text-xs shrink-0 shadow-sm"
+                >
+                  {isSyncingBi ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Landmark className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isSyncingBi ? "Menyinkronkan BI..." : "Tarik Data Bank Indonesia"}</span>
+                </button>
+              </div>
+
               <div className="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl p-8 text-center bg-slate-950/40 transition">
                 <Upload className="w-10 h-10 text-indigo-400 mx-auto mb-3" />
                 <h3 className="text-sm font-bold text-white mb-1">
@@ -371,6 +503,93 @@ export const DataModelManagerModal: React.FC<DataModelManagerModalProps> = ({
                   Pulihkan ke Dataset Default (2024-2026)
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* TAB 2: BANK INDONESIA XML DATASET */}
+          {activeTab === "bi_xml" && (
+            <div className="space-y-4">
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Landmark className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-sm font-bold text-white">
+                      Import XML DataSet Web Service Bank Indonesia
+                    </h3>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/40 font-mono">
+                    wskursbi.asmx / getSubKursLokal
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Tempelkan respon XML dari Web Service Bank Indonesia (format <code>&lt;DataSet&gt;&lt;diffgr:diffgram&gt;&lt;NewDataSet&gt;&lt;Table&gt;...</code>). Sistem akan otomatis mengekstrak seluruh mata uang (USD, EUR, JPY, SGD, CNY, AED, dll.), kurs beli, kurs jual, serta menghitung kurs tengah acuan JISDOR.
+                </p>
+
+                <textarea
+                  rows={8}
+                  value={biXmlText}
+                  onChange={(e) => setBiXmlText(e.target.value)}
+                  placeholder={`<DataSet xmlns="http://tempuri.org/">\n<diffgr:diffgram xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">\n<NewDataSet xmlns="">\n<Table diffgr:id="Table1" msdata:rowOrder="0">\n  <id_subkursasing>982735</id_subkursasing>\n  <nil_subkursasing>1.00</nil_subkursasing>\n  <beli_subkursasing>17673.18</beli_subkursasing>\n  <jual_subkursasing>17850.82</jual_subkursasing>\n  <tgl_subkursasing>2026-08-28T00:00:00+07:00</tgl_subkursasing>\n  <mts_subkursasing>USD</mts_subkursasing>\n</Table>\n</NewDataSet>\n</diffgr:diffgram>\n</DataSet>`}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => {
+                      const sampleXml = `<DataSet xmlns="http://tempuri.org/">
+<diffgr:diffgram xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">
+<NewDataSet xmlns="">
+<Table diffgr:id="Table1" msdata:rowOrder="0">
+<id_subkursasing>982735</id_subkursasing>
+<lnk_subkursasing>1</lnk_subkursasing>
+<nil_subkursasing>1.00</nil_subkursasing>
+<beli_subkursasing>17673.18</beli_subkursasing>
+<jual_subkursasing>17850.82</jual_subkursasing>
+<tgl_subkursasing>2026-08-28T00:00:00+07:00</tgl_subkursasing>
+<mts_subkursasing>USD</mts_subkursasing>
+</Table>
+<Table diffgr:id="Table2" msdata:rowOrder="1">
+<id_subkursasing>982736</id_subkursasing>
+<lnk_subkursasing>1</lnk_subkursasing>
+<nil_subkursasing>1.00</nil_subkursasing>
+<beli_subkursasing>4699.96</beli_subkursasing>
+<jual_subkursasing>4972.50</jual_subkursasing>
+<tgl_subkursasing>2026-08-28T00:00:00+07:00</tgl_subkursasing>
+<mts_subkursasing>AED</mts_subkursasing>
+</Table>
+</NewDataSet>
+</diffgr:diffgram>
+</DataSet>`;
+                      setBiXmlText(sampleXml);
+                    }}
+                    className="text-xs text-emerald-400 hover:underline"
+                  >
+                    Isi Contoh XML Bank Indonesia
+                  </button>
+
+                  <button
+                    onClick={handleImportBiXml}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg transition flex items-center gap-1.5 shadow-md"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Proses & Terapkan Data BI
+                  </button>
+                </div>
+              </div>
+
+              {uploadSuccess && (
+                <div className="bg-emerald-950/70 border border-emerald-700/60 p-3 rounded-xl text-emerald-300 flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400" />
+                  <span>{uploadSuccess}</span>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="bg-rose-950/70 border border-rose-700/60 p-3 rounded-xl text-rose-300 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
             </div>
           )}
 

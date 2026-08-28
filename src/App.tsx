@@ -32,6 +32,7 @@ import { ForexDataPoint, ModelProfile, ModelType, CurrencyCode } from "./types";
 import { calculateMetrics, enrichWithMovingAverages } from "./utils/metricsCalculator";
 import { fetchLatestFrankfurterRate } from "./utils/frankfurterService";
 import { fetchCurrencyFreaksLatest } from "./utils/currencyFreaksService";
+import { fetchBankIndonesiaLatest } from "./utils/biApiService";
 import { RealtimeForexChart } from "./components/RealtimeForexChart";
 import {
   TrendingUp,
@@ -181,27 +182,42 @@ function DashboardContent() {
   const handleRefreshData = useCallback(async () => {
     setIsSyncing(true);
     try {
-      // 1. Fetch live rate from CurrencyFreaks API (User API Key Active)
-      const liveFreaks = await fetchCurrencyFreaksLatest(true).catch(() => null);
-      let targetRate = 17763.5;
+      // 1. Primary Source: Official Bank Indonesia Exchange Rates (wskursbi.asmx)
+      const biRates = await fetchBankIndonesiaLatest().catch(() => null);
+      let targetRate = 17762;
       let targetDate = new Date().toISOString().split("T")[0];
 
-      if (liveFreaks) {
+      if (biRates) {
         targetRate = selectedCurrency === "JPY"
-          ? liveFreaks.jpyIdr
+          ? biRates.jpyIdr
           : selectedCurrency === "EUR"
-          ? liveFreaks.eurIdr
+          ? biRates.eurIdr
           : selectedCurrency === "SGD"
-          ? liveFreaks.sgdIdr
-          : liveFreaks.usdIdr;
-        if (liveFreaks.timestamp) {
-          targetDate = liveFreaks.timestamp.split(" ")[0] || targetDate;
-        }
+          ? biRates.sgdIdr
+          : selectedCurrency === "CNY"
+          ? biRates.cnyIdr
+          : biRates.usdIdr;
+        targetDate = biRates.date || targetDate;
       } else {
-        const frank = await fetchLatestFrankfurterRate(selectedCurrency).catch(() => null);
-        if (frank && frank.rate) {
-          targetRate = frank.rate;
-          targetDate = frank.date || targetDate;
+        // 2. Secondary fallback: CurrencyFreaks / Frankfurter / OpenER
+        const liveFreaks = await fetchCurrencyFreaksLatest(true).catch(() => null);
+        if (liveFreaks) {
+          targetRate = selectedCurrency === "JPY"
+            ? liveFreaks.jpyIdr
+            : selectedCurrency === "EUR"
+            ? liveFreaks.eurIdr
+            : selectedCurrency === "SGD"
+            ? liveFreaks.sgdIdr
+            : liveFreaks.usdIdr;
+          if (liveFreaks.timestamp) {
+            targetDate = liveFreaks.timestamp.split(" ")[0] || targetDate;
+          }
+        } else {
+          const frank = await fetchLatestFrankfurterRate(selectedCurrency).catch(() => null);
+          if (frank && frank.rate) {
+            targetRate = frank.rate;
+            targetDate = frank.date || targetDate;
+          }
         }
       }
       
