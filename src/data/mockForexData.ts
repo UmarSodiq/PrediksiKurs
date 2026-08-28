@@ -70,10 +70,10 @@ export function addDaysToIsoDate(baseDateStr: string, days: number): string {
   return d.toISOString().split("T")[0];
 }
 
-// Extract and parse raw JISDOR CSV records
+// Extract, parse raw JISDOR records and ensure 100% daily continuous calendar records (no gaps)
 export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date: string; actual: number }[] {
   const lines = rawJisdorCsv.trim().split("\n");
-  const parsedRecords: { date: string; actual: number }[] = [];
+  const rawMap = new Map<string, number>();
 
   const ratio = currency === "USD"
     ? 1.0
@@ -84,6 +84,9 @@ export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date
     : currency === "SGD"
     ? 13520 / 17784
     : 2475 / 17784;
+
+  let minDate = "2024-01-02";
+  let maxRawDate = "2026-04-30";
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -101,43 +104,68 @@ export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date
           const mm = m.padStart(2, "0");
           const dd = d.padStart(2, "0");
           const isoDate = `${y}-${mm}-${dd}`;
-          const scaledRate = currency === "JPY"
-            ? Number((rateVal * ratio).toFixed(2))
-            : Math.round(rateVal * ratio);
-          parsedRecords.push({ date: isoDate, actual: scaledRate });
+          rawMap.set(isoDate, rateVal);
+          if (isoDate < minDate) minDate = isoDate;
+          if (isoDate > maxRawDate) maxRawDate = isoDate;
         }
       }
     }
   }
 
-  parsedRecords.sort((a, b) => a.date.localeCompare(b.date));
+  // End date is today (system date), at least 2026-08-28 to guarantee current year completeness
+  const sysToday = new Date().toISOString().split("T")[0];
+  const targetEndDate = sysToday > "2026-08-28" ? sysToday : "2026-08-28";
 
-  // Bridge up to current trading period (August 2026) with smooth daily consecutive records
-  const lastRecord = parsedRecords[parsedRecords.length - 1];
-  if (lastRecord && lastRecord.date <= "2026-05-01") {
-    // Fill every single calendar day from 2026-05-01 to 2026-08-21 (113 days)
-    const startDateStr = "2026-05-01";
-    const totalBridgeDays = 113; // 2026-05-01 through 2026-08-21
-    const startRate = 17380;
-    const targetSpot = 17784;
+  const parsedRecords: { date: string; actual: number }[] = [];
+  let currentDate = minDate;
+  let lastKnownRate = rawMap.get(minDate) || 15473;
 
-    for (let k = 0; k < totalBridgeDays; k++) {
-      const dStr = addDaysToIsoDate(startDateStr, k);
-      if (dStr <= lastRecord.date) continue;
+  // Track bridge progression for smooth transition after maxRawDate
+  const startBridgeRate = rawMap.get(maxRawDate) || 17378;
+  const targetSpot = 17784;
 
-      const progress = k / (totalBridgeDays - 1);
+  // Count total days from day after maxRawDate to targetEndDate
+  let bridgeDayCount = 0;
+  let tempDate = addDaysToIsoDate(maxRawDate, 1);
+  while (tempDate <= targetEndDate) {
+    bridgeDayCount++;
+    tempDate = addDaysToIsoDate(tempDate, 1);
+  }
+  if (bridgeDayCount === 0) bridgeDayCount = 1;
+
+  let bridgeStep = 0;
+
+  while (currentDate <= targetEndDate) {
+    if (currentDate <= maxRawDate) {
+      if (rawMap.has(currentDate)) {
+        lastKnownRate = rawMap.get(currentDate)!;
+      }
+      // If weekend or holiday, lastKnownRate is automatically carried forward (forward-fill / standard forex accounting carryover)
+      const scaledRate = currency === "JPY"
+        ? Number((lastKnownRate * ratio).toFixed(2))
+        : Math.round(lastKnownRate * ratio);
+
+      parsedRecords.push({ date: currentDate, actual: scaledRate });
+    } else {
+      bridgeStep++;
+      const progress = Math.min(1, bridgeStep / bridgeDayCount);
       // Realistic smooth curve with mid-year macro seasonality and micro-volatility
       const seasonalWave = Math.sin(progress * Math.PI * 2) * 45 + Math.cos(progress * 4) * 20;
-      const baseTrend = startRate + (targetSpot - startRate) * progress;
-      const noise = (Math.sin(k * 1.7) * 18 + Math.cos(k * 2.3) * 12);
-      
-      const unscaledRate = k === totalBridgeDays - 1 ? targetSpot : Math.round(baseTrend + seasonalWave * 0.4 + noise);
+      const baseTrend = startBridgeRate + (targetSpot - startBridgeRate) * progress;
+      const noise = (Math.sin(bridgeStep * 1.7) * 18 + Math.cos(bridgeStep * 2.3) * 12);
+
+      const unscaledRate = bridgeStep === bridgeDayCount 
+        ? targetSpot 
+        : Math.round(baseTrend + seasonalWave * 0.4 + noise);
+
       const scaledRate = currency === "JPY"
         ? Number((unscaledRate * ratio).toFixed(2))
         : Math.round(unscaledRate * ratio);
 
-      parsedRecords.push({ date: dStr, actual: scaledRate });
+      parsedRecords.push({ date: currentDate, actual: scaledRate });
     }
+
+    currentDate = addDaysToIsoDate(currentDate, 1);
   }
 
   return parsedRecords;
@@ -247,7 +275,7 @@ export function generateDatasetForModel(
   // Generate 2 Years (730 calendar days) of future horizon out-of-sample forecast
   const lastHist = result[result.length - 1];
   const lastSpot = lastHist ? lastHist.actual || 17784 : 17784;
-  const lastDateStr = lastHist ? lastHist.date : "2026-08-21";
+  const lastDateStr = lastHist ? lastHist.date : (new Date().toISOString().split("T")[0] > "2026-08-28" ? new Date().toISOString().split("T")[0] : "2026-08-28");
   const futureDays = 730; // 2 Full Calendar Years of daily projections (365 days * 2)
 
   for (let f = 1; f <= futureDays; f++) {

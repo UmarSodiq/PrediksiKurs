@@ -26,6 +26,7 @@ import {
   macroFactors,
   currencyProfiles,
   generateDatasetForModel,
+  addDaysToIsoDate,
 } from "./data/mockForexData";
 import { ForexDataPoint, ModelProfile, ModelType, CurrencyCode } from "./types";
 import { calculateMetrics, enrichWithMovingAverages } from "./utils/metricsCalculator";
@@ -123,16 +124,44 @@ function DashboardContent() {
 
   const handleAddActualRate = (newDateStr: string, actualVal: number) => {
     const existingIndex = data.findIndex((d) => d.date === newDateStr);
-    let updated: ForexDataPoint[];
+    let updated: ForexDataPoint[] = [...data];
 
     if (existingIndex >= 0) {
-      updated = [...data];
       updated[existingIndex] = {
         ...updated[existingIndex],
         actual: actualVal,
         isFuture: false,
       };
     } else {
+      const histPoints = data.filter((d) => !d.isFuture && d.actual !== null);
+      const lastHist = histPoints[histPoints.length - 1];
+
+      if (lastHist && newDateStr > lastHist.date) {
+        let stepDate = addDaysToIsoDate(lastHist.date, 1);
+        const startVal = lastHist.actual || actualVal;
+        let diffCount = 0;
+        let temp = stepDate;
+        while (temp <= newDateStr) {
+          diffCount++;
+          temp = addDaysToIsoDate(temp, 1);
+        }
+        let step = 0;
+        while (stepDate < newDateStr) {
+          step++;
+          const prog = step / diffCount;
+          const interp = Math.round(startVal + (actualVal - startVal) * prog);
+          updated.push({
+            date: stepDate,
+            actual: interp,
+            forecast: interp,
+            lowerBound: interp - 100,
+            upperBound: interp + 100,
+            isFuture: false,
+          });
+          stepDate = addDaysToIsoDate(stepDate, 1);
+        }
+      }
+
       const newPoint: ForexDataPoint = {
         date: newDateStr,
         actual: actualVal,
@@ -141,7 +170,8 @@ function DashboardContent() {
         upperBound: Math.round(actualVal + 100),
         isFuture: false,
       };
-      updated = [...data, newPoint].sort((a, b) => a.date.localeCompare(b.date));
+      updated.push(newPoint);
+      updated.sort((a, b) => a.date.localeCompare(b.date));
     }
 
     const recalibrated = generateDatasetForModel(selectedModelId, updated, selectedCurrency);
@@ -184,6 +214,35 @@ function DashboardContent() {
           isFuture: false,
         };
       } else {
+        const histPoints = baseDataset.filter((d) => !d.isFuture && d.actual !== null);
+        const lastHist = histPoints[histPoints.length - 1];
+
+        if (lastHist && targetDate > lastHist.date) {
+          let stepDate = addDaysToIsoDate(lastHist.date, 1);
+          const startVal = lastHist.actual || targetRate;
+          let diffCount = 0;
+          let temp = stepDate;
+          while (temp <= targetDate) {
+            diffCount++;
+            temp = addDaysToIsoDate(temp, 1);
+          }
+          let step = 0;
+          while (stepDate < targetDate) {
+            step++;
+            const prog = step / diffCount;
+            const interp = Math.round(startVal + (targetRate - startVal) * prog);
+            baseDataset.push({
+              date: stepDate,
+              actual: interp,
+              forecast: interp,
+              lowerBound: interp - 100,
+              upperBound: interp + 100,
+              isFuture: false,
+            });
+            stepDate = addDaysToIsoDate(stepDate, 1);
+          }
+        }
+
         baseDataset.push({
           date: targetDate,
           actual: targetRate,

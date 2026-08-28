@@ -19,8 +19,10 @@ export const RateLookupPanel: React.FC<RateLookupPanelProps> = ({ data, selected
     return historical[historical.length - 1] || data[0];
   }, [data]);
 
+  const defaultFallbackDate = new Date().toISOString().split("T")[0] > "2026-08-28" ? new Date().toISOString().split("T")[0] : "2026-08-28";
+
   const [searchDate, setSearchDate] = useState<string>(() => {
-    return latestHist ? latestHist.date : "2026-08-21";
+    return latestHist ? latestHist.date : defaultFallbackDate;
   });
 
   // Dynamic Lookup & Interpolation Engine
@@ -37,7 +39,7 @@ export const RateLookupPanel: React.FC<RateLookupPanelProps> = ({ data, selected
     }
 
     // 2. Dynamic continuous projection for dates beyond or outside dataset
-    const baseDate = latestHist ? latestHist.date : "2026-08-21";
+    const baseDate = latestHist ? latestHist.date : defaultFallbackDate;
     const baseSpot = latestHist?.actual || 17784;
 
     const baseMs = new Date(baseDate).getTime();
@@ -74,7 +76,7 @@ export const RateLookupPanel: React.FC<RateLookupPanelProps> = ({ data, selected
         isExtrapolated: true,
       } as ForexDataPoint & { isExtrapolated: boolean };
     }
-  }, [data, searchDate, latestHist]);
+  }, [data, searchDate, latestHist, defaultFallbackDate]);
 
   // Day of week metadata
   const dayOfWeekInfo = useMemo(() => {
@@ -92,7 +94,7 @@ export const RateLookupPanel: React.FC<RateLookupPanelProps> = ({ data, selected
 
   // Quick Preset Handlers
   const handleSetPreset = (offsetDays: number) => {
-    const baseDate = latestHist ? latestHist.date : "2026-08-21";
+    const baseDate = latestHist ? latestHist.date : defaultFallbackDate;
     setSearchDate(addDaysToIsoDate(baseDate, offsetDays));
   };
 

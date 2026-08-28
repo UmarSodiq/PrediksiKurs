@@ -114,7 +114,7 @@ export async function fetchLatestFrankfurterRate(
   // 6. Final fallback: Official JISDOR Bank Indonesia latest benchmark
   const profile = currencyProfiles.find((p) => p.code === currency) || currencyProfiles[0];
   return {
-    date: "2026-08-21",
+    date: new Date().toISOString().split("T")[0] > "2026-08-28" ? new Date().toISOString().split("T")[0] : "2026-08-28",
     rate: profile.baseRate,
     source: "jisdor_bi_consensus",
   };
