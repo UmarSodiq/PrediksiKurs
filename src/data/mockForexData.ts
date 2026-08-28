@@ -120,51 +120,37 @@ export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date
   let currentDate = minDate;
   let lastKnownRate = rawMap.get(minDate) || 15473;
 
-  // Track bridge progression for smooth transition after maxRawDate
-  const startBridgeRate = rawMap.get(maxRawDate) || 17378;
-  const targetSpot = 17784;
-
-  // Count total days from day after maxRawDate to targetEndDate
-  let bridgeDayCount = 0;
-  let tempDate = addDaysToIsoDate(maxRawDate, 1);
-  while (tempDate <= targetEndDate) {
-    bridgeDayCount++;
-    tempDate = addDaysToIsoDate(tempDate, 1);
-  }
-  if (bridgeDayCount === 0) bridgeDayCount = 1;
-
-  let bridgeStep = 0;
+  // Inter-gap bridge parameters between 2026-04-30 (17378) and 2026-08-12 (17876)
+  const gapStartDate = "2026-05-01";
+  const gapEndDate = "2026-08-11";
+  const startGapRate = 17378;
+  const endGapRate = 17876;
+  const totalGapDays = 103; // May 1 to Aug 11
 
   while (currentDate <= targetEndDate) {
-    if (currentDate <= maxRawDate) {
-      if (rawMap.has(currentDate)) {
-        lastKnownRate = rawMap.get(currentDate)!;
-      }
-      // If weekend or holiday, lastKnownRate is automatically carried forward (forward-fill / standard forex accounting carryover)
-      const scaledRate = currency === "JPY"
-        ? Number((lastKnownRate * ratio).toFixed(2))
-        : Math.round(lastKnownRate * ratio);
-
-      parsedRecords.push({ date: currentDate, actual: scaledRate });
-    } else {
-      bridgeStep++;
-      const progress = Math.min(1, bridgeStep / bridgeDayCount);
-      // Realistic smooth curve with mid-year macro seasonality and micro-volatility
-      const seasonalWave = Math.sin(progress * Math.PI * 2) * 45 + Math.cos(progress * 4) * 20;
-      const baseTrend = startBridgeRate + (targetSpot - startBridgeRate) * progress;
-      const noise = (Math.sin(bridgeStep * 1.7) * 18 + Math.cos(bridgeStep * 2.3) * 12);
-
-      const unscaledRate = bridgeStep === bridgeDayCount 
-        ? targetSpot 
-        : Math.round(baseTrend + seasonalWave * 0.4 + noise);
-
-      const scaledRate = currency === "JPY"
-        ? Number((unscaledRate * ratio).toFixed(2))
-        : Math.round(unscaledRate * ratio);
-
-      parsedRecords.push({ date: currentDate, actual: scaledRate });
+    if (rawMap.has(currentDate)) {
+      lastKnownRate = rawMap.get(currentDate)!;
+    } else if (currentDate >= gapStartDate && currentDate <= gapEndDate) {
+      // Smooth macroeconomic interpolation between April 30 and August 12
+      const [y, m, d] = currentDate.split("-").map(Number);
+      const currMs = Date.UTC(y, m - 1, d);
+      const startMs = Date.UTC(2026, 4, 1); // 2026-05-01
+      const dayOffset = Math.round((currMs - startMs) / (1000 * 60 * 60 * 24)) + 1;
+      const progress = dayOffset / (totalGapDays + 1);
+      const seasonal = Math.sin(progress * Math.PI * 2) * 40 + Math.cos(progress * 4) * 18;
+      const noise = Math.sin(dayOffset * 1.7) * 14 + Math.cos(dayOffset * 2.1) * 9;
+      lastKnownRate = Math.round(startGapRate + (endGapRate - startGapRate) * progress + seasonal * 0.4 + noise);
+    } else if (currentDate > "2026-08-27") {
+      // For today (2026-08-28 onwards), use latest spot consensus
+      lastKnownRate = 17784;
     }
+    // Else (weekends in August or other holidays), lastKnownRate is seamlessly carried forward
 
+    const scaledRate = currency === "JPY"
+      ? Number((lastKnownRate * ratio).toFixed(2))
+      : Math.round(lastKnownRate * ratio);
+
+    parsedRecords.push({ date: currentDate, actual: scaledRate });
     currentDate = addDaysToIsoDate(currentDate, 1);
   }
 
