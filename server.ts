@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import https from "https";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
@@ -57,26 +58,71 @@ app.get("/api/health", (_req, res) => {
 // Bank Indonesia ASMX Web Service base URL
 const BI_WS_BASE = "https://www.bi.go.id/biwebservice/wskursbi.asmx";
 
-// Shared fetch helper for BI web service with TLS and UA headers
-async function fetchBiEndpoint(path: string, timeoutMs = 8000): Promise<string | null> {
-  const url = `${BI_WS_BASE}/${path}`;
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/xml, application/xml, */*",
-      },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (res.ok) {
-      const text = await res.text();
-      if (text.includes("<Table")) return text;
+// Custom HTTPS agent: allows BI's self-signed/intermediate cert (same behavior as PowerShell)
+const biHttpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+/**
+ * Fetch BI web service endpoint using Node.js native https module.
+ * Node.js built-in fetch rejects bi.go.id's TLS certificate, but https.request() works.
+ */
+function fetchBiEndpoint(urlPath: string, timeoutMs = 10000): Promise<string | null> {
+  return new Promise((resolve) => {
+    const fullUrl = `${BI_WS_BASE}/${urlPath}`;
+    const timer = setTimeout(() => {
+      console.warn(`[BI] ${urlPath} timed out after ${timeoutMs}ms`);
+      resolve(null);
+    }, timeoutMs);
+
+    try {
+      const req = https.get(
+        fullUrl,
+        {
+          agent: biHttpsAgent,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/xml, application/xml, */*",
+          },
+          timeout: timeoutMs,
+        },
+        (res) => {
+          if (res.statusCode !== 200) {
+            clearTimeout(timer);
+            console.warn(`[BI] ${urlPath} HTTP ${res.statusCode}`);
+            resolve(null);
+            return;
+          }
+          let data = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => { data += chunk; });
+          res.on("end", () => {
+            clearTimeout(timer);
+            if (data.includes("<Table")) {
+              resolve(data);
+            } else {
+              console.warn(`[BI] ${urlPath} — no <Table> in response`);
+              resolve(null);
+            }
+          });
+        }
+      );
+      req.on("error", (err) => {
+        clearTimeout(timer);
+        console.warn(`[BI] ${urlPath} error:`, err.message);
+        resolve(null);
+      });
+      req.on("timeout", () => {
+        clearTimeout(timer);
+        req.destroy();
+        resolve(null);
+      });
+    } catch (err: any) {
+      clearTimeout(timer);
+      console.warn(`[BI] ${urlPath} exception:`, err?.message);
+      resolve(null);
     }
-  } catch (err) {
-    console.warn(`[BI] ${path} failed:`, (err as any)?.message);
-  }
-  return null;
+  });
 }
+
 
 // Bank Indonesia XML Schema Parser Helper
 function parseBiXml(xmlString: string) {

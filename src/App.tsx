@@ -51,7 +51,22 @@ import { ThemeProvider, useTheme } from "./context/ThemeContext";
 function DashboardContent() {
   const { theme } = useTheme();
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>("USD");
-  const [data, setData] = useState<ForexDataPoint[]>(initialForexData);
+  // Initialize from localStorage JISDOR cache if available (instant load),
+  // then the useEffect will refresh from BI API and update
+  const [data, setData] = useState<ForexDataPoint[]>(() => {
+    try {
+      const cached = localStorage.getItem("bi_jisdor_dataset_v1");
+      if (cached) {
+        const parsed: ForexDataPoint[] = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 10) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return initialForexData;
+  });
   const [selectedModelId, setSelectedModelId] = useState<ModelType>("ensemble");
   const [activeTab, setActiveTab] = useState<MainTabType>("overview");
   const [overviewChartMode, setOverviewChartMode] = useState<"realtime" | "forecast">("realtime");
@@ -303,9 +318,13 @@ function DashboardContent() {
               isFuture: false as const,
             }));
             const calibrated = generateDatasetForModel(selectedModelId, biBaseData, selectedCurrency);
-            setData(enrichWithMovingAverages(calibrated));
+            const enriched = enrichWithMovingAverages(calibrated);
+            setData(enriched);
+            // Persist to localStorage so next load is instant
+            try { localStorage.setItem("bi_jisdor_dataset_v1", JSON.stringify(enriched)); } catch {}
             setLastSyncTime(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-            return; // Skip handleRefreshData on first load, data is already current
+            setIsSyncing(false);
+            return;
           }
         }
       } catch (e) {
