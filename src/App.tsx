@@ -126,8 +126,8 @@ function DashboardContent() {
 
   const handleSelectCurrency = (newCurr: CurrencyCode) => {
     setSelectedCurrency(newCurr);
-    const newDataset = generateDatasetForModel(selectedModelId, undefined, newCurr);
-    setData(enrichWithMovingAverages(newDataset));
+    const newDataset = generateDatasetForModel(selectedModelId, data, newCurr);
+    setData(newDataset);
   };
 
   const handleSaveData = (newData: ForexDataPoint[]) => {
@@ -135,7 +135,7 @@ function DashboardContent() {
   };
 
   const handleResetToDefault = () => {
-    setData(generateDatasetForModel(selectedModelId, undefined, selectedCurrency));
+    setData(generateDatasetForModel(selectedModelId, data, selectedCurrency));
   };
 
   const handleAddActualRate = (newDateStr: string, actualVal: number) => {

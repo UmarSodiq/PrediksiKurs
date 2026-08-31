@@ -4,6 +4,11 @@ import https from "https";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import {
+  generateHybridForexDataset,
+  calculateHistoricalParameters,
+  runWalkForwardBacktesting,
+} from "./src/utils/forexStatisticalEngine";
 
 dotenv.config();
 
@@ -233,6 +238,39 @@ app.get("/api/bi/jisdor-history", async (req, res) => {
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/forecast/calculate — Run real quantitative & stochastic hybrid forecasting engine
+app.post("/api/forecast/calculate", (req, res) => {
+  try {
+    const { historicalData, modelType = "ensemble", currency = "USD", macro } = req.body;
+    if (!Array.isArray(historicalData) || historicalData.length === 0) {
+      return res.status(400).json({ success: false, error: "historicalData array is required" });
+    }
+
+    const records = historicalData.map((d: any) => ({
+      date: d.date,
+      actual: Number(d.actual),
+    }));
+
+    const dataset = generateHybridForexDataset(records, modelType, currency, macro);
+    const params = calculateHistoricalParameters(records);
+    const backtestMetrics = runWalkForwardBacktesting(records, modelType);
+
+    return res.json({
+      success: true,
+      modelType,
+      currency,
+      parameters: params,
+      metrics: backtestMetrics,
+      forecastCount: dataset.filter((d) => d.isFuture).length,
+      data: dataset,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    console.error("Forecast calculate error:", err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
