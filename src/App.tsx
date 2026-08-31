@@ -30,6 +30,7 @@ import {
 } from "./data/mockForexData";
 import { ForexDataPoint, ModelProfile, ModelType, CurrencyCode } from "./types";
 import { calculateMetrics, enrichWithMovingAverages } from "./utils/metricsCalculator";
+import { runWalkForwardBacktesting } from "./utils/forexStatisticalEngine";
 import { fetchLatestFrankfurterRate } from "./utils/frankfurterService";
 import { fetchCurrencyFreaksLatest } from "./utils/currencyFreaksService";
 import { fetchBankIndonesiaLatest } from "./utils/biApiService";
@@ -51,11 +52,11 @@ import { ThemeProvider, useTheme } from "./context/ThemeContext";
 function DashboardContent() {
   const { theme } = useTheme();
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>("USD");
-  // Initialize from localStorage JISDOR cache if available (instant load),
+  // Initialize from localStorage JISDOR cache v2 if available (instant load),
   // then the useEffect will refresh from BI API and update
   const [data, setData] = useState<ForexDataPoint[]>(() => {
     try {
-      const cached = localStorage.getItem("bi_jisdor_dataset_v1");
+      const cached = localStorage.getItem("bi_jisdor_dataset_v2");
       if (cached) {
         const parsed: ForexDataPoint[] = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 10) {
@@ -86,10 +87,17 @@ function DashboardContent() {
     return true;
   });
 
-  // Dynamic metrics based on current dataset
+  // Dynamic metrics based on current model and historical dataset (Empirical Walk-Forward Validation)
   const activeMetrics = useMemo(() => {
-    return calculateMetrics(data);
-  }, [data]);
+    const hist = data
+      .filter((d) => !d.isFuture && d.actual !== null && d.actual !== undefined)
+      .map((d) => ({ date: d.date, actual: d.actual! }));
+    if (hist.length >= 30) {
+      return runWalkForwardBacktesting(hist, selectedModelId);
+    }
+    const found = modelProfiles.find((m) => m.id === selectedModelId) || modelProfiles[0];
+    return found.metrics;
+  }, [data, selectedModelId]);
 
   // Active Model Profile
   const selectedModel = useMemo(() => {
@@ -308,20 +316,11 @@ function DashboardContent() {
           const json = await res.json();
           if (json.success && Array.isArray(json.data) && json.data.length > 0) {
             const biSeries: { date: string; actual: number }[] = json.data;
-            // Build dataset from authentic BI JISDOR data
-            const biBaseData = biSeries.map((p) => ({
-              date: p.date,
-              actual: p.actual,
-              forecast: p.actual,
-              lowerBound: p.actual - 100,
-              upperBound: p.actual + 100,
-              isFuture: false as const,
-            }));
-            const calibrated = generateDatasetForModel(selectedModelId, biBaseData, selectedCurrency);
-            const enriched = enrichWithMovingAverages(calibrated);
-            setData(enriched);
-            // Persist to localStorage so next load is instant
-            try { localStorage.setItem("bi_jisdor_dataset_v1", JSON.stringify(enriched)); } catch {}
+            // Generate full dataset from authentic BI JISDOR data via quantitative statistical engine
+            const calibrated = generateDatasetForModel(selectedModelId, biSeries as any, selectedCurrency);
+            setData(calibrated);
+            // Persist to localStorage v2 so next load is instant
+            try { localStorage.setItem("bi_jisdor_dataset_v2", JSON.stringify(calibrated)); } catch {}
             setLastSyncTime(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
             setIsSyncing(false);
             return;

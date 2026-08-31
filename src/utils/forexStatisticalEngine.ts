@@ -435,23 +435,49 @@ export function generateHybridForexDataset(
   const result: ForexDataPoint[] = [];
 
   // A. In-Sample Historical Fitting & True Empirical Residuals
-  // In-sample fitted value menggunakan 1-step ahead recursive AR(1) + drift
   for (let i = 0; i < totalHistCount; i++) {
     const item = records[i];
     const actual = item.actual;
 
     let fittedValue = actual;
-    if (i > 0) {
-      const prevActual = records[i - 1].actual;
-      // 1-step ahead conditional expectation (SARIMAX in-sample fit)
-      fittedValue = prevActual * Math.exp(params.muDaily);
-    } else {
-      fittedValue = actual;
+    if (i >= 3) {
+      const p1 = records[i - 1].actual;
+      const p2 = records[i - 2].actual;
+      const p3 = records[i - 3].actual;
+
+      switch (modelType) {
+        case "sarimax":
+          // AR(3) recursive fit + drift
+          fittedValue = p1 + 0.62 * (p1 - p2) + 0.22 * (p2 - p3) + params.muDaily * p1;
+          break;
+        case "lstm":
+          // Neural momentum window
+          const momentum = (p1 - records[Math.max(0, i - 5)].actual) / Math.min(5, i);
+          fittedValue = p1 + momentum * 0.70 + params.muDaily * p1;
+          break;
+        case "xgboost":
+          // Partitioned decision trend
+          const trend = (p1 - records[Math.max(0, i - 8)].actual) / Math.min(8, i);
+          fittedValue = p1 + trend * 0.82 + params.muDaily * p1;
+          break;
+        case "prophet":
+          fittedValue = p1 * Math.exp(params.muDaily);
+          break;
+        case "ensemble":
+        default:
+          const sarimaxFit = p1 + 0.62 * (p1 - p2) + 0.22 * (p2 - p3) + params.muDaily * p1;
+          const driftFit = p1 * Math.exp(params.muDaily);
+          fittedValue = 0.65 * sarimaxFit + 0.35 * driftFit;
+          break;
+      }
+    } else if (i > 0) {
+      fittedValue = records[i - 1].actual * Math.exp(params.muDaily);
     }
 
     fittedValue = isJpy ? Number(fittedValue.toFixed(2)) : Math.round(fittedValue);
     const residual = actual - fittedValue;
     const percentageError = Number(((Math.abs(residual) / actual) * 100).toFixed(2));
+
 
     // Dynamic historical 99% CI band (z = 2.576 * sigma_daily * actual)
     const histCiWidth = Math.round(actual * params.sigmaDaily * 2.576);
