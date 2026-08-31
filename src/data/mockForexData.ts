@@ -9,7 +9,6 @@ import {
   BacktestPoint,
 } from "../types";
 import { enrichWithMovingAverages, calculateMetrics } from "../utils/metricsCalculator";
-import { rawJisdorCsv } from "./rawUserHistoricalData";
 
 export const currencyProfiles: CurrencyProfile[] = [
   {
@@ -70,91 +69,16 @@ export function addDaysToIsoDate(baseDateStr: string, days: number): string {
   return d.toISOString().split("T")[0];
 }
 
-// Extract, parse raw JISDOR records and ensure 100% daily continuous calendar records (no gaps)
-export function getBaseHistoricalRecords(currency: CurrencyCode = "USD"): { date: string; actual: number }[] {
-  const lines = rawJisdorCsv.trim().split("\n");
-  const rawMap = new Map<string, number>();
-
-  const ratio = currency === "USD"
-    ? 1.0
-    : currency === "EUR"
-    ? 19340 / 17784
-    : currency === "JPY"
-    ? 118.5 / 17784
-    : currency === "SGD"
-    ? 13520 / 17784
-    : 2475 / 17784;
-
-  let minDate = "2024-01-02";
-  let maxRawDate = "2026-04-30";
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const parts = line.split(";");
-    if (parts.length >= 3) {
-      const rawDate = parts[1].trim();
-      const rawRate = parts[2].trim();
-      const rateVal = parseFloat(rawRate.replace(/,/g, ""));
-
-      if (rawDate && !isNaN(rateVal)) {
-        const datePart = rawDate.split(" ")[0];
-        const [m, d, y] = datePart.split("/");
-        if (m && d && y) {
-          const mm = m.padStart(2, "0");
-          const dd = d.padStart(2, "0");
-          const isoDate = `${y}-${mm}-${dd}`;
-          rawMap.set(isoDate, rateVal);
-          if (isoDate < minDate) minDate = isoDate;
-          if (isoDate > maxRawDate) maxRawDate = isoDate;
-        }
-      }
-    }
-  }
-
-  // End date is today (system date), at least 2026-08-28 to guarantee current year completeness
-  const sysToday = new Date().toISOString().split("T")[0];
-  const targetEndDate = sysToday > "2026-08-28" ? sysToday : "2026-08-28";
-
-  const parsedRecords: { date: string; actual: number }[] = [];
-  let currentDate = minDate;
-  let lastKnownRate = rawMap.get(minDate) || 15473;
-
-  // Inter-gap bridge parameters between 2026-04-30 (17378) and 2026-08-12 (17876)
-  const gapStartDate = "2026-05-01";
-  const gapEndDate = "2026-08-11";
-  const startGapRate = 17378;
-  const endGapRate = 17876;
-  const totalGapDays = 103; // May 1 to Aug 11
-
-  while (currentDate <= targetEndDate) {
-    if (rawMap.has(currentDate)) {
-      lastKnownRate = rawMap.get(currentDate)!;
-    } else if (currentDate >= gapStartDate && currentDate <= gapEndDate) {
-      // Smooth macroeconomic interpolation between April 30 and August 12
-      const [y, m, d] = currentDate.split("-").map(Number);
-      const currMs = Date.UTC(y, m - 1, d);
-      const startMs = Date.UTC(2026, 4, 1); // 2026-05-01
-      const dayOffset = Math.round((currMs - startMs) / (1000 * 60 * 60 * 24)) + 1;
-      const progress = dayOffset / (totalGapDays + 1);
-      const seasonal = Math.sin(progress * Math.PI * 2) * 40 + Math.cos(progress * 4) * 18;
-      const noise = Math.sin(dayOffset * 1.7) * 14 + Math.cos(dayOffset * 2.1) * 9;
-      lastKnownRate = Math.round(startGapRate + (endGapRate - startGapRate) * progress + seasonal * 0.4 + noise);
-    } else if (currentDate > "2026-08-27") {
-      // For today (2026-08-28 onwards), use latest spot consensus
-      lastKnownRate = 17784;
-    }
-    // Else (weekends in August or other holidays), lastKnownRate is seamlessly carried forward
-
-    const scaledRate = currency === "JPY"
-      ? Number((lastKnownRate * ratio).toFixed(2))
-      : Math.round(lastKnownRate * ratio);
-
-    parsedRecords.push({ date: currentDate, actual: scaledRate });
-    currentDate = addDaysToIsoDate(currentDate, 1);
-  }
-
-  return parsedRecords;
+/**
+ * Returns base historical records for a given currency.
+ * Data is now loaded at runtime exclusively from Bank Indonesia JISDOR API
+ * via /api/bi/jisdor-history (server.ts) and cached in localStorage.
+ *
+ * This function returns an empty array to signal that data must be fetched
+ * from the BI API. generateDatasetForModel() handles the BI data path.
+ */
+export function getBaseHistoricalRecords(_currency: CurrencyCode = "USD"): { date: string; actual: number }[] {
+  return [];
 }
 
 /**

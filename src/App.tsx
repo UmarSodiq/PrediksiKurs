@@ -281,10 +281,45 @@ function DashboardContent() {
     }
   }, [data, selectedModelId, selectedCurrency]);
 
+  // On startup: load full historical series from BI JISDOR, then poll for live updates
   useEffect(() => {
-    handleRefreshData();
+    const initFromBiJisdor = async () => {
+      setIsSyncing(true);
+      try {
+        // Fetch full historical JISDOR series from Bank Indonesia (2024-01-01 → today)
+        const today = new Date().toISOString().split("T")[0];
+        const res = await fetch(`/api/bi/jisdor-history?startDate=2024-01-01&endDate=${today}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+            const biSeries: { date: string; actual: number }[] = json.data;
+            // Build dataset from authentic BI JISDOR data
+            const biBaseData = biSeries.map((p) => ({
+              date: p.date,
+              actual: p.actual,
+              forecast: p.actual,
+              lowerBound: p.actual - 100,
+              upperBound: p.actual + 100,
+              isFuture: false as const,
+            }));
+            const calibrated = generateDatasetForModel(selectedModelId, biBaseData, selectedCurrency);
+            setData(enrichWithMovingAverages(calibrated));
+            setLastSyncTime(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+            return; // Skip handleRefreshData on first load, data is already current
+          }
+        }
+      } catch (e) {
+        console.warn("[App] BI JISDOR history init failed, falling back to spot refresh:", e);
+      } finally {
+        setIsSyncing(false);
+      }
+      // Fallback: use spot rate refresh if history fetch fails
+      await handleRefreshData();
+    };
 
-    // Setup live polling every 5 minutes (300000ms)
+    initFromBiJisdor();
+
+    // Live polling every 5 minutes for latest spot rate update
     const interval = setInterval(() => {
       handleRefreshData();
     }, 300000);

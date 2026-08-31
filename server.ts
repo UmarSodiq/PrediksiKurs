@@ -54,6 +54,30 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Bank Indonesia ASMX Web Service base URL
+const BI_WS_BASE = "https://www.bi.go.id/biwebservice/wskursbi.asmx";
+
+// Shared fetch helper for BI web service with TLS and UA headers
+async function fetchBiEndpoint(path: string, timeoutMs = 8000): Promise<string | null> {
+  const url = `${BI_WS_BASE}/${path}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/xml, application/xml, */*",
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (res.ok) {
+      const text = await res.text();
+      if (text.includes("<Table")) return text;
+    }
+  } catch (err) {
+    console.warn(`[BI] ${path} failed:`, (err as any)?.message);
+  }
+  return null;
+}
+
 // Bank Indonesia XML Schema Parser Helper
 function parseBiXml(xmlString: string) {
   const records: any[] = [];
@@ -98,32 +122,81 @@ function parseBiXml(xmlString: string) {
   return records;
 }
 
-// 1. Bank Indonesia Live API Endpoint (wskursbi.asmx)
-app.get("/api/bi/latest", async (_req, res) => {
-  try {
-    const biServiceUrls = [
-      "https://www.bi.go.id/biweb/services/wskursbi.asmx/getSubKursLokal3",
-      "https://www.bi.go.id/biweb/services/wskursbi.asmx/getSubKursLokal",
-    ];
+// ── Bank Indonesia API Endpoints ────────────────────────────────────────────
 
-    let xmlText = "";
-    for (const url of biServiceUrls) {
-      try {
-        const biRes = await fetch(url, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/xml, application/xml, */*",
-          },
-          signal: AbortSignal.timeout(4000),
+// GET /api/bi/jisdor-latest — Latest JISDOR USD/IDR rate (single record)
+app.get("/api/bi/jisdor-latest", async (_req, res) => {
+  try {
+    const xmlText = await fetchBiEndpoint("getSubKursJisdor1");
+    if (xmlText) {
+      const records = parseBiXml(xmlText);
+      const usd = records.find((r) => r.currency === "USD");
+      if (usd) {
+        return res.json({
+          success: true,
+          source: "Bank Indonesia JISDOR (getSubKursJisdor1)",
+          date: usd.date,
+          rate: usd.tengah,
+          beli: Math.round(usd.beli),
+          jual: Math.round(usd.jual),
+          timestamp: new Date().toISOString(),
         });
-        if (biRes.ok) {
-          xmlText = await biRes.text();
-          if (xmlText.includes("<Table")) break;
-        }
-      } catch (err) {
-        // continue fallback
       }
     }
+    return res.status(503).json({ success: false, error: "JISDOR data not available" });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/bi/jisdor-history — Historical JISDOR USD/IDR series
+// Query params: startDate (YYYY-MM-DD, required), endDate (YYYY-MM-DD, optional)
+app.get("/api/bi/jisdor-history", async (req, res) => {
+  try {
+    const startIso = (req.query.startDate as string) || "2024-01-01";
+    const endIso = (req.query.endDate as string) || new Date().toISOString().split("T")[0];
+
+    // Convert YYYY-MM-DD → MM/DD/YYYY for BI API
+    const toBI = (iso: string) => {
+      const [y, m, d] = iso.split("-");
+      return `${m}/${d}/${y}`;
+    };
+
+    const path = `getSubKursJisdor3?mts=USD&startDate=${toBI(startIso)}&endDate=${toBI(endIso)}`;
+    const xmlText = await fetchBiEndpoint(path, 15000);
+
+    if (!xmlText) {
+      return res.status(503).json({ success: false, error: "BI JISDOR history unavailable" });
+    }
+
+    const records = parseBiXml(xmlText);
+    const usdRecords = records.filter((r) => r.currency === "USD");
+
+    const series = usdRecords
+      .map((r) => ({ date: r.date, actual: r.tengah }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return res.json({
+      success: true,
+      source: "Bank Indonesia JISDOR (getSubKursJisdor3)",
+      count: series.length,
+      startDate: startIso,
+      endDate: endIso,
+      data: series,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/bi/latest — Latest BI Kurs Transaksi (all currencies, beli/jual)
+app.get("/api/bi/latest", async (_req, res) => {
+  try {
+    // Try JISDOR first for USD/IDR, then Kurs Lokal for multi-currency spread
+    const jisdorXml = await fetchBiEndpoint("getSubKursJisdor1");
+    const lokalXml = await fetchBiEndpoint("getSubKursLokal1");
+    const xmlText = lokalXml || jisdorXml || "";
 
     let records = xmlText ? parseBiXml(xmlText) : [];
 
@@ -192,7 +265,31 @@ app.get("/api/frankfurter/latest", async (req, res) => {
   const currLower = fromCurrency.toLowerCase();
 
   try {
-    // 1. Try Open Exchange Rates public feed (real-time spot rate)
+    // 1. Bank Indonesia JISDOR (primary source — USD/IDR only)
+    if (fromCurrency === "USD") {
+      try {
+        const biXml = await fetchBiEndpoint("getSubKursJisdor1");
+        if (biXml) {
+          const biRecs = parseBiXml(biXml);
+          const usdRec = biRecs.find((r) => r.currency === "USD");
+          if (usdRec) {
+            return res.json({
+              success: true,
+              source: "Bank Indonesia JISDOR",
+              base: "USD",
+              symbol: "IDR",
+              date: usdRec.date,
+              rate: usdRec.tengah,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("[BI] JISDOR fetch failed, falling back to Open ER:", e);
+      }
+    }
+
+    // 2. Try Open Exchange Rates public feed (real-time spot rate)
     try {
       const openRes = await fetch(`https://open.er-api.com/v6/latest/${fromCurrency}`);
       if (openRes.ok) {
@@ -493,16 +590,33 @@ app.get("/api/macro/latest", async (req, res) => {
     let usdIdrRate: number | null = null;
     let usdIdrDate = new Date().toISOString().split("T")[0];
 
-    // 1. Fetch latest USD/IDR from Frankfurter API
+    // 1. Fetch latest USD/IDR from Bank Indonesia JISDOR (primary source)
     try {
-      const frankRes = await fetch("https://api.frankfurter.app/latest?from=USD&to=IDR");
-      if (frankRes.ok) {
-        const fData = await frankRes.json();
-        usdIdrRate = fData.rates?.IDR || null;
-        usdIdrDate = fData.date || usdIdrDate;
+      const biXml = await fetchBiEndpoint("getSubKursJisdor1");
+      if (biXml) {
+        const biRecs = parseBiXml(biXml);
+        const usdRec = biRecs.find((r) => r.currency === "USD");
+        if (usdRec) {
+          usdIdrRate = usdRec.tengah;
+          usdIdrDate = usdRec.date;
+        }
       }
     } catch (e) {
-      console.warn("Frankfurter rate fetch failed during macro sync:", e);
+      console.warn("[BI] JISDOR fetch during macro sync failed:", e);
+    }
+
+    // 2. Fallback: Frankfurter API if BI unreachable
+    if (!usdIdrRate) {
+      try {
+        const frankRes = await fetch("https://api.frankfurter.app/latest?from=USD&to=IDR");
+        if (frankRes.ok) {
+          const fData = await frankRes.json();
+          usdIdrRate = fData.rates?.IDR || null;
+          usdIdrDate = fData.date || usdIdrDate;
+        }
+      } catch (e) {
+        console.warn("Frankfurter rate fetch failed during macro sync:", e);
+      }
     }
 
     // 2. Fetch live DXY and Brent Oil concurrently
@@ -511,9 +625,9 @@ app.get("/api/macro/latest", async (req, res) => {
       fetchLiveBrent(),
     ]);
 
-    // Default latest indicators (Calibrated to latest official Bank Indonesia & BPS releases)
+    // Default latest indicators (primary source: Bank Indonesia JISDOR)
     let indicators = {
-      usdIdr: usdIdrRate || 17705,
+      usdIdr: usdIdrRate || 17784,
       usdIdrDate,
       biRate: 5.75,
       fedFunds: 3.63,
@@ -523,7 +637,7 @@ app.get("/api/macro/latest", async (req, res) => {
       inflasi: 3.34,
       reserve: 145600.00, // $145.6 Miliar USD Posisi Cadangan Devisa Bank Indonesia
       sources: {
-        usdIdr: "Frankfurter API (European Central Bank / Spot)",
+        usdIdr: usdIdrRate ? "Bank Indonesia JISDOR (wskursbi.asmx)" : "Frankfurter API (ECB Fallback)",
         biRate: "Bank Indonesia (RDG Consensus)",
         fedFunds: "Federal Reserve Board (FFR)",
         dxy: liveDxyResult ? liveDxyResult.source : "Intercontinental Exchange (ICE / Consensus)",

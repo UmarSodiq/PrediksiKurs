@@ -1,6 +1,13 @@
+/**
+ * Forex Data Service — Single Source: Bank Indonesia JISDOR (wskursbi.asmx)
+ *
+ * All USD/IDR rates now come from Bank Indonesia JISDOR via the backend proxy.
+ * Frankfurter / Open ER APIs are kept only as emergency fallback if BI is unreachable.
+ */
+
 import { ForexDataPoint, CurrencyCode } from "../types";
 import { enrichWithMovingAverages } from "./metricsCalculator";
-import { getBaseHistoricalRecords, currencyProfiles } from "../data/mockForexData";
+import { fetchBiJisdorLatest, fetchBiJisdorHistory } from "./biApiService";
 
 export interface FrankfurterLatestResponse {
   success: boolean;
@@ -23,12 +30,21 @@ export interface FrankfurterHistoryResponse {
 }
 
 /**
- * Fetch latest live FX rate against IDR from real-time forex APIs with comprehensive multi-tier fallback
+ * Fetch latest live FX rate against IDR.
+ * Priority: 1. BI JISDOR → 2. Open ER API → 3. Frankfurter → 4. Hardcoded fallback
  */
 export async function fetchLatestFrankfurterRate(
   currency: CurrencyCode = "USD"
 ): Promise<{ date: string; rate: number; source?: string }> {
-  // 1. Try backend proxy
+  // 1. Bank Indonesia JISDOR (primary source — USD/IDR only)
+  if (currency === "USD") {
+    const biResult = await fetchBiJisdorLatest();
+    if (biResult) {
+      return biResult;
+    }
+  }
+
+  // 2. Backend proxy (handles multi-currency + BI Kurs Lokal for non-USD)
   try {
     const res = await fetch(`/api/frankfurter/latest?from=${currency}`);
     if (res.ok) {
@@ -38,92 +54,67 @@ export async function fetchLatestFrankfurterRate(
       }
     }
   } catch (e) {
-    console.warn("Backend proxy failed, trying direct real-time APIs...", e);
+    console.warn("[FX] Backend proxy failed, trying direct APIs...", e);
   }
 
-  // 2. Direct Open ER API (High availability, open CORS)
+  // 3. Direct Open ER API (high availability CORS-friendly)
   try {
     const directRes = await fetch(`https://open.er-api.com/v6/latest/${currency}`);
     if (directRes.ok) {
-      const directJson = await directRes.json();
-      const rate = directJson.rates?.IDR;
+      const data = await directRes.json();
+      const rate = data.rates?.IDR;
       if (rate && typeof rate === "number") {
-        const date = directJson.time_last_update_utc
-          ? new Date(directJson.time_last_update_utc).toISOString().split("T")[0]
+        const date = data.time_last_update_utc
+          ? new Date(data.time_last_update_utc).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0];
-        const formattedRate = currency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate);
-        return { date, rate: formattedRate, source: "open_er_api_direct" };
-      }
-    }
-  } catch (e) {
-    console.warn("Direct Open ER API failed...", e);
-  }
-
-  // 3. Direct Frankfurter DEV API (New official v1 endpoint with CORS)
-  try {
-    const directRes = await fetch(`https://api.frankfurter.dev/v1/latest?base=${currency}&symbols=IDR`);
-    if (directRes.ok) {
-      const directJson = await directRes.json();
-      const rate = directJson.rates?.IDR;
-      const date = directJson.date || new Date().toISOString().split("T")[0];
-      if (rate && typeof rate === "number") {
-        const formattedRate = currency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate);
-        return { date, rate: formattedRate, source: "frankfurter_dev_direct" };
-      }
-    }
-  } catch (e) {
-    console.warn("Direct Frankfurter Dev API failed...", e);
-  }
-
-  // 4. Direct Frankfurter App API (Legacy endpoint)
-  try {
-    const directRes = await fetch(`https://api.frankfurter.app/latest?from=${currency}&to=IDR`);
-    if (directRes.ok) {
-      const directJson = await directRes.json();
-      const rate = directJson.rates?.IDR;
-      const date = directJson.date || new Date().toISOString().split("T")[0];
-      if (rate && typeof rate === "number") {
-        const formattedRate = currency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate);
-        return { date, rate: formattedRate, source: "frankfurter_direct" };
-      }
-    }
-  } catch (e) {
-    console.warn("Direct Frankfurter API failed...", e);
-  }
-
-  // 5. Fawaz Ahmed Currency CDN
-  try {
-    const currLower = currency.toLowerCase();
-    const fawazRes = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${currLower}.json`);
-    if (fawazRes.ok) {
-      const fawazData = await fawazRes.json();
-      const rate = fawazData[currLower]?.idr;
-      if (rate && typeof rate === "number") {
-        const formattedRate = currency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate);
         return {
-          date: fawazData.date || new Date().toISOString().split("T")[0],
-          rate: formattedRate,
-          source: "currency_api_cdn",
+          date,
+          rate: currency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate),
+          source: "open_er_api_direct",
         };
       }
     }
   } catch (e) {
-    console.warn("Fawaz currency API failed...", e);
+    console.warn("[FX] Open ER API direct failed:", e);
   }
 
-  // 6. Final fallback: Official JISDOR Bank Indonesia latest benchmark
-  const profile = currencyProfiles.find((p) => p.code === currency) || currencyProfiles[0];
+  // 4. Frankfurter API (ECB reference rate)
+  for (const url of [
+    `https://api.frankfurter.dev/v1/latest?base=${currency}&symbols=IDR`,
+    `https://api.frankfurter.app/latest?from=${currency}&to=IDR`,
+  ]) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const rate = data.rates?.IDR;
+        if (rate && typeof rate === "number") {
+          return {
+            date: data.date || new Date().toISOString().split("T")[0],
+            rate: currency === "JPY" ? Number(rate.toFixed(2)) : Math.round(rate),
+            source: "frankfurter_ecb",
+          };
+        }
+      }
+    } catch (e) {
+      console.warn(`[FX] Frankfurter ${url} failed:`, e);
+    }
+  }
+
+  // 5. Hardcoded consensus fallback (last resort)
+  const fallbackRates: Record<string, number> = {
+    USD: 17784, EUR: 19340, JPY: 118.5, SGD: 13520, CNY: 2475,
+  };
   return {
-    date: new Date().toISOString().split("T")[0] > "2026-08-28" ? new Date().toISOString().split("T")[0] : "2026-08-28",
-    rate: profile.baseRate,
-    source: "jisdor_bi_consensus",
+    date: new Date().toISOString().split("T")[0],
+    rate: fallbackRates[currency] ?? 17784,
+    source: "hardcoded_fallback",
   };
 }
 
 /**
- * Fetch full historical FX time-series against IDR (from startDate to present)
- * Supports flexible signature: fetchHistoricalFrankfurterSeries(currency, startDate, endDate)
- * or fetchHistoricalFrankfurterSeries(startDate, endDate)
+ * Fetch full historical FX time-series against IDR (from startDate to endDate/today).
+ * Priority: 1. BI JISDOR History → 2. Backend Frankfurter proxy → 3. Direct Frankfurter
  */
 export async function fetchHistoricalFrankfurterSeries(
   currencyOrStartDate: CurrencyCode | string = "USD",
@@ -142,11 +133,18 @@ export async function fetchHistoricalFrankfurterSeries(
     endDate = startDateOrEndDate !== "2024-01-01" ? startDateOrEndDate : undefined;
   }
 
-  // 1. Try backend proxy
+  // 1. Bank Indonesia JISDOR History (primary — USD/IDR only)
+  if (currency === "USD") {
+    const biSeries = await fetchBiJisdorHistory(startDate, endDate);
+    if (biSeries.length > 0) {
+      return biSeries;
+    }
+  }
+
+  // 2. Backend proxy (Frankfurter — handles multi-currency)
   try {
     const query = new URLSearchParams({ from: currency, startDate });
     if (endDate) query.set("endDate", endDate);
-
     const res = await fetch(`/api/frankfurter/history?${query.toString()}`);
     if (res.ok) {
       const json: FrankfurterHistoryResponse = await res.json();
@@ -155,24 +153,22 @@ export async function fetchHistoricalFrankfurterSeries(
       }
     }
   } catch (e) {
-    console.warn("Backend proxy failed, trying direct Frankfurter historical call...", e);
+    console.warn("[FX] Backend Frankfurter history proxy failed:", e);
   }
 
-  // 2. Direct client-side fetch from Frankfurter mirrors
+  // 3. Direct Frankfurter mirrors (multi-currency fallback)
   const range = endDate ? `${startDate}..${endDate}` : `${startDate}..`;
-  const mirrorUrls = [
+  for (const url of [
     `https://api.frankfurter.dev/v1/${range}?base=${currency}&symbols=IDR`,
     `https://api.frankfurter.app/${range}?from=${currency}&to=IDR`,
-  ];
-
-  for (const directUrl of mirrorUrls) {
+  ]) {
     try {
-      const directRes = await fetch(directUrl);
-      if (directRes.ok) {
-        const directJson = await directRes.json();
-        if (directJson.rates && typeof directJson.rates === "object") {
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.rates && typeof json.rates === "object") {
           const series: { date: string; actual: number }[] = [];
-          for (const [dKey, rObj] of Object.entries(directJson.rates as Record<string, any>)) {
+          for (const [dKey, rObj] of Object.entries(json.rates as Record<string, any>)) {
             if (rObj && typeof rObj.IDR === "number") {
               series.push({
                 date: dKey,
@@ -187,46 +183,35 @@ export async function fetchHistoricalFrankfurterSeries(
         }
       }
     } catch (e) {
-      console.warn(`Direct Frankfurter mirror (${directUrl}) failed:`, e);
+      console.warn(`[FX] Direct Frankfurter ${url} failed:`, e);
     }
   }
 
-  // 3. Resilient fallback: Return baseline historical dataset filtered by date range
-  const baseline = getBaseHistoricalRecords(currency);
-  const filtered = baseline.filter((r) => {
-    if (endDate) {
-      return r.date >= startDate && r.date <= endDate;
-    }
-    return r.date >= startDate;
-  });
-
-  return filtered.length > 0 ? filtered : baseline;
+  return [];
 }
 
 /**
- * Merge Frankfurter historical actual series into existing dataset with forecasts & 99% CL
+ * Merge historical actual series into existing dataset with forecasts & 99% CL.
+ * Used when live data from BI JISDOR is fetched and needs to update the chart dataset.
  */
 export function mergeFrankfurterDataIntoDataset(
   currentDataset: ForexDataPoint[],
   frankfurterPoints: { date: string; actual: number }[]
 ): ForexDataPoint[] {
-  const frankfurterMap = new Map<string, number>();
-  frankfurterPoints.forEach((p) => {
-    frankfurterMap.set(p.date, p.actual);
-  });
+  const incomingMap = new Map<string, number>();
+  frankfurterPoints.forEach((p) => incomingMap.set(p.date, p.actual));
 
-  // 1. Update existing matching dates or add new ones
+  // Update existing matching dates
   const updatedExisting: ForexDataPoint[] = currentDataset.map((d, i) => {
-    if (frankfurterMap.has(d.date)) {
-      const actualVal = frankfurterMap.get(d.date)!;
-      // Re-fit forecast to the updated actual value maintaining low model residual variance
+    if (incomingMap.has(d.date)) {
+      const actualVal = incomingMap.get(d.date)!;
       const modelDeviation = Math.sin(i * 1.5) * 22 + Math.cos(i * 2.2) * 16;
       const forecastVal = Math.round(actualVal + modelDeviation);
       const residual = actualVal - forecastVal;
       const pctError = Number(((Math.abs(residual) / actualVal) * 100).toFixed(2));
       const ciWidth = Math.round(26 * 2.576); // 99% CL
 
-      frankfurterMap.delete(d.date); // marked as processed
+      incomingMap.delete(d.date);
 
       return {
         ...d,
@@ -242,13 +227,13 @@ export function mergeFrankfurterDataIntoDataset(
     return d;
   });
 
-  // 2. Add brand new historical points from Frankfurter not yet present
+  // Add new historical points not yet in dataset
   const newPoints: ForexDataPoint[] = [];
   let newIdx = updatedExisting.length;
-  frankfurterMap.forEach((actVal, dateKey) => {
+  incomingMap.forEach((actVal, dateKey) => {
     const modelDeviation = Math.sin(newIdx * 1.5) * 22 + Math.cos(newIdx * 2.2) * 16;
     const forecastVal = Math.round(actVal + modelDeviation);
-    const ciWidth = Math.round(26 * 2.576); // 99% CL
+    const ciWidth = Math.round(26 * 2.576);
     newPoints.push({
       date: dateKey,
       actual: actVal,
